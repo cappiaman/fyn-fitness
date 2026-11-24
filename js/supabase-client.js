@@ -370,11 +370,13 @@ window.FYN_SUPABASE = {
 
     // Get current authenticated user from token
     let activeUser = null;
-    let activeUserId = 3; // default fallback to Aman Yadav
+    let activeUserId = 5; // Canonical Aman Yadav user ID
     if (token) {
       const { data: sessionRows } = await sb.from('sessions').select('user_id').eq('token', token).limit(1);
       if (sessionRows && sessionRows.length > 0 && sessionRows[0].user_id) {
         activeUserId = sessionRows[0].user_id;
+        // Normalize any legacy user 3 to canonical user 5
+        if (activeUserId === 3) activeUserId = 5;
         const { data: uRows } = await sb.from('users').select('*').eq('id', activeUserId).limit(1);
         if (uRows && uRows.length > 0) {
           activeUser = uRows[0];
@@ -382,8 +384,11 @@ window.FYN_SUPABASE = {
       }
     }
     if (!activeUser) {
-      const { data: uList } = await sb.from('users').select('*').eq('id', activeUserId).limit(1);
-      if (uList && uList.length > 0) activeUser = uList[0];
+      const { data: uList } = await sb.from('users').select('*').eq('id', 5).limit(1);
+      if (uList && uList.length > 0) {
+        activeUser = uList[0];
+        activeUserId = 5;
+      }
     }
 
     // 1. Inquiries Form Submission
@@ -431,9 +436,9 @@ window.FYN_SUPABASE = {
         }
       }
 
-      // Universal account recovery alias for Aman Yadav
-      if (!u && (identifier === 'aman' || identifier === 'cappiaman' || identifier === 'amanyadav' || identifier.includes('amanatnccindia') || identifier.includes('amanrao2001'))) {
-        const { data: uAman } = await sb.from('users').select('*').eq('id', 3).limit(1);
+      // Universal account mapping for Aman Yadav -> Always maps to Canonical User 5
+      if (!u || identifier === 'aman' || identifier === 'cappiaman' || identifier === 'amanyadav' || identifier.includes('amanatnccindia') || identifier.includes('amanrao2001')) {
+        const { data: uAman } = await sb.from('users').select('*').eq('id', 5).limit(1);
         if (uAman && uAman.length > 0) u = uAman[0];
       }
 
@@ -444,7 +449,7 @@ window.FYN_SUPABASE = {
       const computedHash = await hashPasswordWithSalt(password, u.salt);
       const isMatch = (computedHash === u.password_hash) || (password === 'aman123') || (u.password_hash === password);
 
-      // If Aman Yadav is logging in from another device with any password, seamlessly update and authenticate!
+      // If Aman Yadav is logging in from any device with any password, seamlessly update and authenticate!
       const isAman = (u.id === 3 || u.id === 5 || u.username === 'aman' || u.username === 'amanyadav' || u.username === 'cappiaman' || (u.email && u.email.includes('aman')));
       if (!isMatch && isAman) {
         const salt = generateRandomHex(16);
@@ -457,7 +462,7 @@ window.FYN_SUPABASE = {
       }
 
       const newToken = generateRandomHex(24);
-      await sb.from('sessions').insert([{ token: newToken, user_id: u.id }]);
+      await sb.from('sessions').insert([{ token: newToken, user_id: 5 }]);
 
       const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', u.id).limit(1);
       const settings = (sRows && sRows[0]) || {};
@@ -585,15 +590,15 @@ window.FYN_SUPABASE = {
     // 4. Authentication: Validate Current User (/api/auth/me)
     if (path === '/api/auth/me') {
       if (!activeUser) {
-        const { data: uList } = await sb.from('users').select('*').eq('id', 3).limit(1);
+        const { data: uList } = await sb.from('users').select('*').eq('id', 5).limit(1);
         if (uList && uList.length > 0) {
           activeUser = uList[0];
-          activeUserId = 3;
+          activeUserId = 5;
         } else {
           return { user: null };
         }
       }
-      const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', activeUserId).limit(1);
+      const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', 5).limit(1);
       const settings = (sRows && sRows[0]) || {};
       return { user: { ...activeUser, ...settings } };
     }
@@ -1211,7 +1216,7 @@ window.FYN_SUPABASE = {
     if (path === '/api/daily-journal' || path === '/api/journal') {
       const qDate = params.date || new Date().toISOString().split('T')[0];
       if (method === 'GET') {
-        const { data } = await sb.from('daily_journals').select('*').eq('user_id', activeUserId).eq('journal_date', qDate).limit(1);
+        const { data } = await sb.from('daily_journals').select('*').in('user_id', userScope).eq('journal_date', qDate).limit(1);
         return { journal: data?.[0] || null };
       }
       if (method === 'POST') {
@@ -1246,7 +1251,7 @@ window.FYN_SUPABASE = {
 
     // 21. Meal Templates (/api/meals/templates)
     if (path === '/api/meals/templates') {
-      const { data, error } = await sb.from('meal_templates').select('*').eq('user_id', activeUserId).order('id', { ascending: true });
+      const { data, error } = await sb.from('meal_templates').select('*').in('user_id', userScope).order('id', { ascending: true });
       if (error) throw error;
       return { templates: data || [] };
     }
@@ -1283,7 +1288,7 @@ window.FYN_SUPABASE = {
     // 23. Workout Sessions (/api/workout-sessions)
     if (path === '/api/workout-sessions') {
       if (method === 'GET') {
-        const { data, error } = await sb.from('workout_sessions').select('*').eq('user_id', activeUserId).order('session_date', { ascending: false });
+        const { data, error } = await sb.from('workout_sessions').select('*').in('user_id', userScope).order('session_date', { ascending: false });
         if (error) throw error;
         return { sessions: data || [] };
       }
@@ -1316,7 +1321,7 @@ window.FYN_SUPABASE = {
     // 24. Workout Plans (/api/workout-plans)
     if (path === '/api/workout-plans') {
       if (method === 'GET') {
-        const { data } = await sb.from('workout_plans').select('*').eq('user_id', activeUserId).order('id', { ascending: true });
+        const { data } = await sb.from('workout_plans').select('*').in('user_id', userScope).order('id', { ascending: true });
         return { plans: data || [] };
       }
       if (method === 'POST') {
