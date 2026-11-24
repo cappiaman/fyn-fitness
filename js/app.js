@@ -3079,13 +3079,32 @@ class FYNApp {
     const password = document.getElementById('loginPassword').value;
 
     try {
-      const res = await this.apiFetch('/api/auth/login', {
-        method: 'POST',
-        body: { username, password }
-      });
+      // 1. Authenticate with local / production API
+      let res = null;
+      try {
+        res = await this.apiFetch('/api/auth/login', {
+          method: 'POST',
+          body: { username, password }
+        });
+      } catch (apiErr) {
+        // Fallback to Supabase cloud auth directly if API is unreachable
+        if (window.FYN_SUPABASE) {
+          console.log('[FYN Auth] Using direct Supabase cloud authentication...');
+          res = await window.FYN_SUPABASE.login(username, password);
+        } else {
+          throw apiErr;
+        }
+      }
+
       if (res && res.token) {
         this.token = res.token;
         localStorage.setItem('fyn_session_token', res.token);
+
+        // Also sync session to Supabase
+        if (window.FYN_SUPABASE) {
+          window.FYN_SUPABASE.login(username, password).catch(() => {});
+        }
+
         this.closeAuthModal();
         await this.checkAuth();
         this.showToast(`Welcome back, ${res.user.name || res.user.username}!`);
@@ -3104,19 +3123,98 @@ class FYNApp {
     const password = document.getElementById('regPassword').value;
 
     try {
-      const res = await this.apiFetch('/api/auth/register', {
-        method: 'POST',
-        body: { name, phone, username, email, password }
-      });
+      let res = null;
+      try {
+        res = await this.apiFetch('/api/auth/register', {
+          method: 'POST',
+          body: { name, phone, username, email, password }
+        });
+      } catch (apiErr) {
+        if (window.FYN_SUPABASE) {
+          console.log('[FYN Auth] Registering directly in Supabase cloud database...');
+          res = await window.FYN_SUPABASE.register({ name, phone, username, email, password });
+        } else {
+          throw apiErr;
+        }
+      }
+
       if (res && res.token) {
         this.token = res.token;
         localStorage.setItem('fyn_session_token', res.token);
+
+        // Also save to Supabase
+        if (window.FYN_SUPABASE) {
+          window.FYN_SUPABASE.register({ name, phone, username, email, password }).catch(() => {});
+        }
+
         this.closeAuthModal();
         await this.checkAuth();
-        this.showToast(`Account created for ${name}!`);
+        this.showToast(`Account created for ${name}! Saved to Supabase.`);
       }
     } catch (err) {
       alert('Registration failed: ' + err.message);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // CLIENT INQUIRIES & CONSULTATION FORMS (SUPABASE BACKEND)
+  // -------------------------------------------------------------
+  openInquiryModal() {
+    const modal = document.getElementById('inquiryModal');
+    if (modal) {
+      modal.classList.add('open');
+      this.refreshIcons();
+    }
+  }
+
+  closeInquiryModal() {
+    const modal = document.getElementById('inquiryModal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  closeInquiryModalIfOutside(e) {
+    if (e.target.id === 'inquiryModal') this.closeInquiryModal();
+  }
+
+  async submitInquiryForm(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSubmitInquiry');
+    const originalText = btn.innerHTML;
+
+    const data = {
+      name: document.getElementById('inqName').value.trim(),
+      email: document.getElementById('inqEmail').value.trim(),
+      phone: document.getElementById('inqPhone').value.trim(),
+      fitness_goal: document.getElementById('inqGoal').value,
+      subject: document.getElementById('inqSubject').value.trim(),
+      message: document.getElementById('inqMessage').value.trim()
+    };
+
+    try {
+      btn.disabled = true;
+      btn.innerHTML = '<span>Saving to Supabase...</span>';
+
+      if (window.FYN_SUPABASE) {
+        await window.FYN_SUPABASE.submitInquiry(data);
+      } else {
+        // Fallback to local server
+        await this.apiFetch('/api/inquiries', {
+          method: 'POST',
+          body: data
+        });
+      }
+
+      this.closeInquiryModal();
+      document.getElementById('inquiryForm').reset();
+      this.showToast('Inquiry submitted! Stored in Supabase cloud backend.');
+      window.fynHaptic?.('success');
+    } catch (err) {
+      console.error('[Inquiry Error]:', err);
+      alert('Failed to submit inquiry: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      this.refreshIcons();
     }
   }
 

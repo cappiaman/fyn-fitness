@@ -150,6 +150,11 @@
           <span id="headerUserName">Aman Yadav</span>
         </button>
 
+        <!-- Inquire / Contact Coach Button -->
+        <button class="btn-icon-minimal" onclick="app.openInquiryModal()" title="Client Inquiry & Consultation Form">
+          <i data-lucide="mail" style="width: 16px; height: 16px;"></i>
+        </button>
+
         <!-- Monochrome Theme Toggle -->
         <button class="btn-icon-minimal" onclick="app.toggleTheme()" title="Toggle Monochrome Theme">
           <i data-lucide="sun" id="themeIcon" style="width: 16px; height: 16px;"></i>
@@ -2307,6 +2312,76 @@
     </div>
   </div>
 
+
+  <!-- ===================================================================
+       MODAL: CLIENT INQUIRY & CONSULTATION (DIRECT SUPABASE PERSISTENCE)
+       =================================================================== -->
+  <div id="inquiryModal" class="modal-overlay" onclick="app.closeInquiryModalIfOutside(event)">
+    <div class="modal-dialog" style="max-width: 540px;">
+      <div class="modal-header">
+        <div>
+          <div class="badge-mini" style="margin-bottom: 4px; display: inline-flex; align-items: center; gap: 4px;">
+            <span>✦</span> <span>SUPABASE CLOUD SYNC</span>
+          </div>
+          <h3 class="modal-title">Client Inquiry & Consultation</h3>
+          <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px;">
+            Inquiries and client details are saved directly into your Supabase database.
+          </p>
+        </div>
+        <button class="modal-close-btn" onclick="app.closeInquiryModal()"><i data-lucide="x" style="width: 18px; height: 18px;"></i></button>
+      </div>
+
+      <div class="modal-body">
+        <form id="inquiryForm" onsubmit="app.submitInquiryForm(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+            <div>
+              <label class="form-label" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Full Name *</label>
+              <input type="text" id="inqName" class="form-control" placeholder="e.g. Rahul Sharma" required>
+            </div>
+            <div>
+              <label class="form-label" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Email Address *</label>
+              <input type="email" id="inqEmail" class="form-control" placeholder="client@example.com" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+            <div>
+              <label class="form-label" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Phone / WhatsApp</label>
+              <input type="tel" id="inqPhone" class="form-control" placeholder="+91 98765 43210">
+            </div>
+            <div>
+              <label class="form-label" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Primary Goal</label>
+              <select id="inqGoal" class="form-control">
+                <option value="Fat Loss & Metabolic Health">Fat Loss & Metabolic Health</option>
+                <option value="Muscle Hypertrophy & Strength">Muscle Hypertrophy & Strength</option>
+                <option value="Garmin Endurance & Zone 2 Cardio">Garmin Endurance & Zone 2 Cardio</option>
+                <option value="Personalized Diet & Workout Protocol">Personalized Diet & Workout Protocol</option>
+                <option value="General Performance Inquiry">General Performance Inquiry</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Subject</label>
+            <input type="text" id="inqSubject" class="form-control" placeholder="e.g. 1-on-1 Coaching Consultation / Diet Plan Question">
+          </div>
+
+          <div>
+            <label class="form-label" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Message / Health Details *</label>
+            <textarea id="inqMessage" class="form-control" rows="4" placeholder="Describe your current routine, goals, dietary preferences, or questions..." required style="resize: vertical;"></textarea>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
+            <button type="button" class="btn-secondary" onclick="app.closeInquiryModal()">Cancel</button>
+            <button type="submit" class="btn-primary" id="btnSubmitInquiry">
+              <i data-lucide="send" style="width: 15px; height: 15px;"></i>
+              <span>Submit Inquiry</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <!-- Toast Notification -->
   <div id="toastNotice" class="toast-notice">

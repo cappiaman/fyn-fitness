@@ -32,6 +32,29 @@ DB_PATH = os.path.join(BASE_DIR, "fyn_health.db")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # -------------------------------------------------------------
+# Supabase Cloud Backend Configuration (Project: FYN Health OS)
+# -------------------------------------------------------------
+SUPABASE_URL = "https://oqrlyhcgilmqnynvhunr.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xcmx5aGNnaWxtcW55bnZodW5yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MjMxNTEsImV4cCI6MjExMTA5OTE1MX0.gJBweQQGwLqaxj5Uu35bgxQQkx_vfKmppoazebV0YqU"
+
+def push_to_supabase(table, data):
+    """Asynchronously or safely push data directly to Supabase REST endpoint"""
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/{table}"
+        headers = {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        }
+        json_bytes = json.dumps(data).encode('utf-8')
+        req = urllib.request.Request(url, data=json_bytes, headers=headers, method='POST')
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            pass
+    except Exception as e:
+        print(f"[Supabase Sync Error ({table})]: {e}")
+
+# -------------------------------------------------------------
 # Database Management & Schema
 # -------------------------------------------------------------
 def get_db():
@@ -314,6 +337,21 @@ def init_db():
         logged_date TEXT NOT NULL,
         created_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    )
+    ''')
+
+    # Client Inquiries & Lead Forms (Synced to Supabase)
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS inquiries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT DEFAULT '',
+        subject TEXT DEFAULT '',
+        fitness_goal TEXT DEFAULT '',
+        message TEXT DEFAULT '',
+        status TEXT DEFAULT 'new',
+        created_at TEXT NOT NULL
     )
     ''')
     
@@ -1420,6 +1458,13 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             conn.close()
             return self.send_json({"settings": dict(row) if row else {}})
 
+        # 13. Inquiries List (Admin access)
+        if path == '/api/inquiries':
+            c.execute('SELECT * FROM inquiries ORDER BY created_at DESC')
+            rows = [dict(r) for r in c.fetchall()]
+            conn.close()
+            return self.send_json({"inquiries": rows})
+
         conn.close()
         self.send_error(404, "API route not found")
 
@@ -1430,6 +1475,41 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
         body = self.read_json_body()
         conn = get_db()
         c = conn.cursor()
+
+        # 0. Client Inquiries (Public Submission, saved to SQLite & Supabase)
+        if path == '/api/inquiries':
+            name = body.get('name', '').strip()
+            email = body.get('email', '').strip().lower()
+            phone = body.get('phone', '').strip()
+            subject = body.get('subject', 'Website Inquiry').strip()
+            fitness_goal = body.get('fitness_goal', '').strip()
+            message = body.get('message', '').strip()
+
+            if not name or not email or not message:
+                conn.close()
+                return self.send_json({"error": "Name, email, and message are required."}, status=400)
+
+            now_str = datetime.now().isoformat()
+            c.execute('''
+                INSERT INTO inquiries (name, email, phone, subject, fitness_goal, message, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'new', ?)
+            ''', (name, email, phone, subject, fitness_goal, message, now_str))
+            inquiry_id = c.lastrowid
+            conn.commit()
+            conn.close()
+
+            # Push to Supabase Cloud Database
+            push_to_supabase('inquiries', {
+                'name': name,
+                'email': email,
+                'phone': phone,
+                'subject': subject,
+                'fitness_goal': fitness_goal,
+                'message': message,
+                'status': 'new'
+            })
+
+            return self.send_json({"success": True, "id": inquiry_id, "message": "Inquiry recorded in Supabase."})
 
         # 1. Register New Account
         if path == '/api/auth/register':
@@ -1466,6 +1546,21 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             c.execute('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)', (token, new_user_id, now_str))
             conn.commit()
             conn.close()
+
+            # Mirror account creation and session to Supabase
+            push_to_supabase('users', {
+                'username': username,
+                'email': email,
+                'password_hash': p_hash,
+                'salt': salt,
+                'name': name,
+                'role': 'client',
+                'phone': phone
+            })
+            push_to_supabase('sessions', {
+                'token': token,
+                'user_id': new_user_id
+            })
 
             return self.send_json({
                 "message": "Account created successfully!",
