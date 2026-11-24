@@ -161,39 +161,24 @@ class FYNApp {
   }
 
   async checkAuth() {
-    if (!this.token) {
-      // Auto sign-in with Aman Yadav's prefilled credentials for first load convenience
+    if (this.token) {
       try {
-        const res = await this.apiFetch('/api/auth/login', {
-          method: 'POST',
-          body: { username: 'aman', password: 'aman123' }
-        });
-        if (res && res.token) {
-          this.token = res.token;
-          localStorage.setItem('fyn_session_token', res.token);
+        const res = await this.apiFetch('/api/auth/me');
+        if (res && res.user) {
           this.setCurrentUser(res.user);
           this.renderAuthenticatedState();
           this.loadDashboard();
           return;
         }
-      } catch (e) {
-        this.renderUnauthenticatedState();
-        return;
+      } catch (err) {
+        console.warn('[FYN] Stored session validation failed:', err);
+        localStorage.removeItem('fyn_session_token');
+        this.token = '';
       }
     }
 
-    try {
-      const res = await this.apiFetch('/api/auth/me');
-      if (res && res.user) {
-        this.setCurrentUser(res.user);
-        this.renderAuthenticatedState();
-        this.loadDashboard();
-      } else {
-        this.renderUnauthenticatedState();
-      }
-    } catch (err) {
-      this.renderUnauthenticatedState();
-    }
+    // No active session: show clean sign-in screen
+    this.renderUnauthenticatedState();
   }
 
   renderAuthenticatedState() {
