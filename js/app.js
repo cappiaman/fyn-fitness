@@ -1585,6 +1585,8 @@ class FYNApp {
       this.showToast(res.message || 'Profile and clinical reports updated!');
       await this.checkAuth();
       this.closeProfileModal();
+      this.loadDashboard();
+      this.loadAiAudit();
     } catch (err) {
       alert('Error updating profile: ' + err.message);
     }
@@ -2347,21 +2349,21 @@ class FYNApp {
         <div class="form-grid-2" style="margin-top: 0.5rem;">
           <div class="form-group">
             <label class="form-label">Weight (kg)</label>
-            <input type="number" step="0.1" id="uWeightVal" value="${d.weight_kg || 74.5}">
+            <input type="number" step="0.1" id="uWeightVal" value="${d.weight_kg || (this.currentUser && this.currentUser.weight_kg) || 124.0}">
           </div>
           <div class="form-group">
             <label class="form-label">Body Fat %</label>
-            <input type="number" step="0.1" id="uWeightFat" value="${d.body_fat_pct || 16.8}">
+            <input type="number" step="0.1" id="uWeightFat" value="${d.body_fat_pct || 28.5}">
           </div>
         </div>
         <div class="form-grid-2">
           <div class="form-group">
             <label class="form-label">Muscle Mass (kg)</label>
-            <input type="number" step="0.1" id="uWeightMuscle" value="${d.muscle_mass_kg || 59.4}">
+            <input type="number" step="0.1" id="uWeightMuscle" value="${d.muscle_mass_kg || 78.0}">
           </div>
           <div class="form-group">
             <label class="form-label">BMI</label>
-            <input type="number" step="0.1" id="uWeightBmi" value="${d.bmi || 23.5}">
+            <input type="number" step="0.1" id="uWeightBmi" value="${d.bmi || (this.currentUser && this.currentUser.weight_kg && this.currentUser.height_cm ? +(this.currentUser.weight_kg / Math.pow(this.currentUser.height_cm / 100, 2)).toFixed(1) : 35.5)}">
           </div>
         </div>
       `;
