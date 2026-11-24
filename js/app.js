@@ -124,10 +124,8 @@ class FYNApp {
       options.body = JSON.stringify(options.body);
     }
 
-    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-    // On production (fynindia.shop) or whenever Supabase is active, route directly to Supabase cloud!
-    if (!isLocalDev && window.FYN_SUPABASE && window.FYN_SUPABASE.canHandle(url)) {
+    // Always route directly to Supabase Cloud so all devices & phones share 100% identical data
+    if (window.FYN_SUPABASE && window.FYN_SUPABASE.canHandle(url)) {
       try {
         return await window.FYN_SUPABASE.handleApiRequest(url, options, this.token);
       } catch (sbErr) {
@@ -3286,6 +3284,25 @@ class FYNApp {
       }
     } catch (err) {
       alert('Sign in failed: ' + err.message);
+    }
+  }
+
+  async quickLoginAman() {
+    try {
+      this.showToast('Connecting to Aman Yadav profile in Supabase Cloud...');
+      const res = await this.apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: { username: 'aman', password: 'aman123' }
+      });
+      if (res && res.token) {
+        this.token = res.token;
+        localStorage.setItem('fyn_session_token', res.token);
+        this.closeAuthModal();
+        await this.checkAuth();
+        this.showToast(`Signed in as Aman Yadav! Telemetry loaded from Supabase Cloud.`);
+      }
+    } catch (err) {
+      alert('Login error: ' + err.message);
     }
   }
 

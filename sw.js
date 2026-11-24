@@ -1,5 +1,5 @@
-// FYN OS Service Worker - Network-First Dynamic Telemetry (Big Brain Sync)
-const CACHE_NAME = 'fyn-app-cache-v12-bigbrain-sync';
+// FYN OS Service Worker - Network-First Dynamic Telemetry (Online Cloud Sync)
+const CACHE_NAME = 'fyn-app-cache-v13-online-cloud-sync';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
