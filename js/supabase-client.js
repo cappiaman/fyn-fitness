@@ -364,10 +364,10 @@ window.FYN_SUPABASE = {
     const method = (options.method || 'GET').toUpperCase();
     const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
 
-    // Get current authenticated user from session token
+    // Get current authenticated user from session token (never accept password reset tokens)
     let activeUser = null;
     let activeUserId = null;
-    if (token) {
+    if (token && !token.startsWith('rst_')) {
       const { data: sessionRows } = await sb.from('sessions').select('user_id').eq('token', token).limit(1);
       if (sessionRows && sessionRows.length > 0 && sessionRows[0].user_id) {
         activeUserId = sessionRows[0].user_id;
@@ -386,13 +386,49 @@ window.FYN_SUPABASE = {
       path === '/api/auth/login' ||
       path === '/api/auth/register' ||
       path === '/api/auth/me' ||
-      path === '/api/auth/logout'
+      path === '/api/auth/logout' ||
+      path === '/api/auth/forgot-password/verify' ||
+      path === '/api/auth/forgot-password/reset' ||
+      path === '/api/auth/change-password'
     );
 
     // Strict privacy & security guard: block unauthorized access to private health OS
     if (!isPublic && (!activeUser || !activeUserId)) {
       throw new Error('Authentication required. Please sign in to view your telemetry.');
     }
+
+    // Helper: Resolve account by username, email, or 10-digit phone (plus explicit Aman aliases)
+    const resolveUserByIdentifier = async (rawIdent) => {
+      const ident = (rawIdent || '').trim().toLowerCase();
+      const digits = (rawIdent || '').replace(/[^\d]/g, '');
+      if (!ident) return null;
+
+      // Explicit Aman Yadav canonical aliases
+      if (
+        ident === 'aman' ||
+        ident === 'cappiaman' ||
+        ident === 'amanyadav' ||
+        ident === 'aman yadav' ||
+        ident === 'amanatnccindia@gmail.com' ||
+        ident === 'amanrao2001@gmail.com' ||
+        digits.slice(-10) === '8376998899'
+      ) {
+        const { data: uAman } = await sb.from('users').select('*').eq('id', 5).limit(1);
+        if (uAman && uAman.length > 0) return uAman[0];
+      }
+
+      const { data: uByName } = await sb.from('users').select('*').ilike('username', ident).limit(1);
+      if (uByName && uByName.length > 0) return uByName[0];
+
+      const { data: uByEmail } = await sb.from('users').select('*').ilike('email', ident).limit(1);
+      if (uByEmail && uByEmail.length > 0) return uByEmail[0];
+
+      if (digits.length >= 10) {
+        const { data: uByPhone } = await sb.from('users').select('*').ilike('phone', `%${digits.slice(-10)}%`).limit(1);
+        if (uByPhone && uByPhone.length > 0) return uByPhone[0];
+      }
+      return null;
+    };
 
     // 1. Inquiries Form Submission
     if (path === '/api/inquiries' && method === 'POST') {
@@ -412,72 +448,189 @@ window.FYN_SUPABASE = {
 
     // 2. Authentication: Login
     if (path === '/api/auth/login' && method === 'POST') {
-      const identifier = (body.username || '').trim().toLowerCase();
-      const rawDigits = (body.username || '').replace(/[^\d]/g, '');
+      const identifier = (body.username || '').trim();
       const password = body.password || '';
 
       if (!identifier || !password) {
         throw new Error('Username/email/phone and password are required.');
       }
 
-      let u = null;
-      // 1. Query by exact username
-      const { data: uByName } = await sb.from('users').select('*').ilike('username', identifier).limit(1);
-      if (uByName && uByName.length > 0) {
-        u = uByName[0];
-      } else {
-        // 2. Query by exact email
-        const { data: uByEmail } = await sb.from('users').select('*').ilike('email', identifier).limit(1);
-        if (uByEmail && uByEmail.length > 0) {
-          u = uByEmail[0];
-        } else if (rawDigits.length >= 10) {
-          // 3. Query by 10-digit mobile number
-          const { data: uByPhone } = await sb.from('users').select('*').ilike('phone', `%${rawDigits.slice(-10)}%`).limit(1);
-          if (uByPhone && uByPhone.length > 0) {
-            u = uByPhone[0];
-          }
-        }
-      }
-
-      // Universal account mapping for Aman Yadav -> Always maps to Canonical User 5
-      if (!u || identifier === 'aman' || identifier === 'cappiaman' || identifier === 'amanyadav' || identifier.includes('amanatnccindia') || identifier.includes('amanrao2001')) {
-        const { data: uAman } = await sb.from('users').select('*').eq('id', 5).limit(1);
-        if (uAman && uAman.length > 0) u = uAman[0];
-      }
-
+      const u = await resolveUserByIdentifier(identifier);
       if (!u) {
-        throw new Error('No account found with this username, email, or phone number.');
+        throw new Error('No account found with this username, email, or mobile number.');
       }
 
-      const computedHash = await hashPasswordWithSalt(password, u.salt);
-      const isMatch = (computedHash === u.password_hash) || (password === 'aman123') || (u.password_hash === password);
-
-      // If Aman Yadav is logging in from any device with any password, seamlessly update and authenticate!
-      const isAman = (u.id === 3 || u.id === 5 || u.username === 'aman' || u.username === 'amanyadav' || u.username === 'cappiaman' || (u.email && u.email.includes('aman')));
-      if (!isMatch && isAman) {
-        const salt = generateRandomHex(16);
-        const newHash = await hashPasswordWithSalt(password, salt);
-        await sb.from('users').update({ password_hash: newHash, salt: salt }).in('id', [3, 5]);
-        u.password_hash = newHash;
-        u.salt = salt;
-      } else if (!isMatch) {
-        throw new Error('Incorrect password. Please try again.');
+      const computedHash = await hashPasswordWithSalt(password, u.salt || '');
+      const isMatch = (computedHash === u.password_hash) || (u.password_hash === password);
+      if (!isMatch) {
+        throw new Error('Incorrect password. Click "Forgot Password?" if you need to reset it.');
       }
 
+      const sessionUid = (u.id === 3 || u.id === 5) ? 5 : u.id;
       const newToken = generateRandomHex(24);
-      await sb.from('sessions').insert([{ token: newToken, user_id: 5 }]);
+      await sb.from('sessions').insert([{ token: newToken, user_id: sessionUid }]);
 
-      const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', u.id).limit(1);
+      const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', sessionUid).limit(1);
       const settings = (sRows && sRows[0]) || {};
 
       return {
         message: 'Sign in successful!',
         token: newToken,
-        user: { ...u, ...settings }
+        user: { ...u, id: sessionUid, ...settings }
       };
     }
 
-    // 3. Authentication: Register (Seamless Idempotent Onboarding)
+    // 2b. Forgot Password Step 1: Verify Identity & Issue Short-Lived Reset Token
+    if (path === '/api/auth/forgot-password/verify' && method === 'POST') {
+      const identifier = (body.identifier || body.username || '').trim();
+      const verification = (body.verification || '').trim();
+      if (!identifier || !verification) {
+        throw new Error('Please enter both your account username/email and verification detail.');
+      }
+
+      const u = await resolveUserByIdentifier(identifier);
+      if (!u) {
+        throw new Error('No account found matching that username, email, or mobile number.');
+      }
+
+      const idLower = identifier.toLowerCase();
+      const idDigits = identifier.replace(/[^\d]/g, '').slice(-10);
+      const vLower = verification.toLowerCase();
+      const vDigits = verification.replace(/[^\d]/g, '').slice(-10);
+      const uPhoneDigits = (u.phone || '').replace(/[^\d]/g, '').slice(-10);
+
+      let verified = false;
+      // Match registered mobile number (10-digit or last-4+ suffix when phone is on file)
+      if (uPhoneDigits.length >= 4 && vDigits.length >= 4 && vDigits !== idDigits) {
+        if (uPhoneDigits === vDigits || uPhoneDigits.endsWith(vDigits)) verified = true;
+      }
+      // Match email (when identifier wasn't that exact email)
+      if (!verified && u.email && vLower === u.email.toLowerCase() && vLower !== idLower) {
+        verified = true;
+      }
+      // Match username (when identifier wasn't that exact username)
+      if (!verified && u.username && vLower === u.username.toLowerCase() && vLower !== idLower) {
+        verified = true;
+      }
+      // Match full name (when identifier wasn't that exact full name)
+      if (!verified && u.name && vLower === u.name.trim().toLowerCase() && vLower !== idLower) {
+        verified = true;
+      }
+
+      if (!verified) {
+        throw new Error('Verification did not match our records. Enter a registered detail different from your login identifier (e.g. mobile number, email, or full name).');
+      }
+
+      const targetUid = (u.id === 3 || u.id === 5) ? 5 : u.id;
+      const resetToken = `rst_${generateRandomHex(20)}`;
+      await sb.from('sessions').insert([{ token: resetToken, user_id: targetUid }]);
+
+      return {
+        verified: true,
+        reset_token: resetToken,
+        user: { id: targetUid, username: u.username, name: u.name, email: u.email },
+        message: 'Identity verified. Please enter your new password.'
+      };
+    }
+
+    // 2c. Forgot Password Step 2: Set New Password with Reset Token
+    if (path === '/api/auth/forgot-password/reset' && method === 'POST') {
+      const resetToken = (body.reset_token || '').trim();
+      const newPassword = body.new_password || '';
+
+      if (!resetToken || !resetToken.startsWith('rst_')) {
+        throw new Error('Invalid or missing reset token. Please verify your identity again.');
+      }
+      if (!newPassword || newPassword.length < 4) {
+        throw new Error('New password must be at least 4 characters long.');
+      }
+
+      const { data: tokRows } = await sb.from('sessions').select('*').eq('token', resetToken).limit(1);
+      if (!tokRows || tokRows.length === 0) {
+        throw new Error('Reset link/session expired or already used. Please verify again.');
+      }
+      const tokRow = tokRows[0];
+      if (tokRow.created_at) {
+        const ageMs = Date.now() - new Date(tokRow.created_at).getTime();
+        if (ageMs > 15 * 60 * 1000) {
+          await sb.from('sessions').delete().eq('token', resetToken);
+          throw new Error('Reset session expired (15 min limit). Please verify again.');
+        }
+      }
+
+      const targetUid = (tokRow.user_id === 3 || tokRow.user_id === 5) ? 5 : tokRow.user_id;
+      await sb.from('sessions').delete().eq('token', resetToken);
+
+      const salt = generateRandomHex(16);
+      const passwordHash = await hashPasswordWithSalt(newPassword, salt);
+      const userScopeIds = (targetUid === 5) ? [3, 5] : [targetUid];
+      const { error: updErr } = await sb.from('users').update({ salt, password_hash: passwordHash }).in('id', userScopeIds);
+      if (updErr) throw updErr;
+
+      // Issue new authenticated session immediately
+      const newToken = generateRandomHex(24);
+      await sb.from('sessions').insert([{ token: newToken, user_id: targetUid }]);
+
+      const [{ data: uRows }, { data: sRows }] = await Promise.all([
+        sb.from('users').select('*').eq('id', targetUid).limit(1),
+        sb.from('user_settings').select('*').eq('user_id', targetUid).limit(1)
+      ]);
+      const updatedUser = (uRows && uRows[0]) || { id: targetUid };
+      const settings = (sRows && sRows[0]) || {};
+
+      return {
+        message: 'Password reset successfully! You are now signed in.',
+        token: newToken,
+        user: { ...updatedUser, ...settings }
+      };
+    }
+
+    // 2d. Change / Reset Known Password
+    if (path === '/api/auth/change-password' && method === 'POST') {
+      const identifier = (body.identifier || body.username || '').trim();
+      const currentPassword = body.current_password || '';
+      const newPassword = body.new_password || '';
+
+      if (!currentPassword || !newPassword) {
+        throw new Error('Current password and new password are required.');
+      }
+      if (newPassword.length < 4) {
+        throw new Error('New password must be at least 4 characters long.');
+      }
+
+      let u = activeUser;
+      if (identifier) {
+        u = await resolveUserByIdentifier(identifier);
+      }
+      if (!u) {
+        throw new Error('Account not found. Please check your username or email.');
+      }
+
+      const curHash = await hashPasswordWithSalt(currentPassword, u.salt || '');
+      if (curHash !== u.password_hash && u.password_hash !== currentPassword) {
+        throw new Error('Current password is incorrect.');
+      }
+
+      const targetUid = (u.id === 3 || u.id === 5) ? 5 : u.id;
+      const salt = generateRandomHex(16);
+      const newHash = await hashPasswordWithSalt(newPassword, salt);
+      const userScopeIds = (targetUid === 5) ? [3, 5] : [targetUid];
+      const { error: chgErr } = await sb.from('users').update({ salt, password_hash: newHash }).in('id', userScopeIds);
+      if (chgErr) throw chgErr;
+
+      const newToken = generateRandomHex(24);
+      await sb.from('sessions').insert([{ token: newToken, user_id: targetUid }]);
+      const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', targetUid).limit(1);
+      const settings = (sRows && sRows[0]) || {};
+
+      return {
+        message: 'Password updated successfully!',
+        token: newToken,
+        user: { ...u, id: targetUid, ...settings }
+      };
+    }
+
+    // 3. Authentication: Register (Strict Duplicate Protection)
     if (path === '/api/auth/register' && method === 'POST') {
       const username = (body.username || '').trim().toLowerCase();
       const email = (body.email || '').trim().toLowerCase();
@@ -488,42 +641,18 @@ window.FYN_SUPABASE = {
       if (!username || !email || !password) {
         throw new Error('Full name, username, email, and password are required.');
       }
-
-      // Check if email or username already exists — seamless password update & instant sign in
-      let existing = null;
-      const { data: byEmail } = await sb.from('users').select('*').ilike('email', email).limit(1);
-      if (byEmail && byEmail.length > 0) {
-        existing = byEmail[0];
-      } else {
-        const { data: byUser } = await sb.from('users').select('*').ilike('username', username).limit(1);
-        if (byUser && byUser.length > 0) {
-          existing = byUser[0];
-        }
+      if (password.length < 4) {
+        throw new Error('Password must be at least 4 characters long.');
       }
 
-      if (existing) {
-        const salt = generateRandomHex(16);
-        const passwordHash = await hashPasswordWithSalt(password, salt);
-        await sb.from('users').update({
-          password_hash: passwordHash,
-          salt: salt,
-          name: name || existing.name,
-          phone: phone || existing.phone,
-          username: username || existing.username,
-          email: email || existing.email
-        }).eq('id', existing.id);
-
-        const newToken = generateRandomHex(24);
-        await sb.from('sessions').insert([{ token: newToken, user_id: existing.id }]);
-
-        const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', existing.id).limit(1);
-        const settings = (sRows && sRows[0]) || {};
-
-        return {
-          message: 'Account verified & signed in successfully!',
-          token: newToken,
-          user: { ...existing, ...settings, name, phone, username, email }
-        };
+      // Reject duplicate accounts cleanly so existing accounts cannot be overwritten
+      const { data: byEmail } = await sb.from('users').select('id').ilike('email', email).limit(1);
+      if (byEmail && byEmail.length > 0) {
+        throw new Error('An account with this email already exists. Please Sign In or use Forgot Password.');
+      }
+      const { data: byUser } = await sb.from('users').select('id').ilike('username', username).limit(1);
+      if (byUser && byUser.length > 0) {
+        throw new Error('This username is already taken. Please Sign In or choose another username.');
       }
 
       // Create new user account
@@ -539,8 +668,8 @@ window.FYN_SUPABASE = {
         name,
         role: 'client',
         phone,
-        height_cm: 187,
-        weight_kg: 124
+        height_cm: parseFloat(body.height_cm || 0) || 0,
+        weight_kg: parseFloat(body.weight_kg || 0) || 0
       }]).select();
 
       if (regErr || !newUsers || newUsers.length === 0) {
@@ -556,8 +685,8 @@ window.FYN_SUPABASE = {
           name,
           role: 'client',
           phone,
-          height_cm: 187,
-          weight_kg: 124
+          height_cm: parseFloat(body.height_cm || 0) || 0,
+          weight_kg: parseFloat(body.weight_kg || 0) || 0
         }]).select();
         if (fbErr || !fbUsers || fbUsers.length === 0) {
           throw new Error(fbErr?.message || regErr?.message || 'Failed to create user account');
@@ -619,34 +748,65 @@ window.FYN_SUPABASE = {
         .order('id', { ascending: true });
       if (error) throw error;
 
-      // Parallel telemetry count queries for high-performance admin dashboard overview
+      // Parallel telemetry counts & stored media byte estimation
       const [
-        { data: foodCounts },
-        { data: fitCounts },
-        { data: sleepCounts },
-        { data: weightCounts },
-        { data: habitCounts }
+        { data: foodRows },
+        { data: fitRows },
+        { data: sleepRows },
+        { data: weightRows },
+        { data: habitRows },
+        { data: sessionRows },
+        { data: wsRows }
       ] = await Promise.all([
-        sb.from('food_logs').select('user_id'),
-        sb.from('fitness_logs').select('user_id'),
-        sb.from('sleep_logs').select('user_id'),
-        sb.from('weight_logs').select('user_id'),
-        sb.from('daily_protocols').select('user_id')
+        sb.from('food_logs').select('user_id, image_url'),
+        sb.from('fitness_logs').select('user_id, image_url'),
+        sb.from('sleep_logs').select('user_id, image_url'),
+        sb.from('weight_logs').select('user_id, image_url'),
+        sb.from('daily_protocols').select('user_id'),
+        sb.from('sessions').select('user_id'),
+        sb.from('workout_sessions').select('user_id, garmin_image_url')
       ]);
 
       const countMap = {};
       (clientList || []).forEach(c => {
-        countMap[c.id] = { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0 };
+        countMap[c.id] = { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0, sessions: 0, workouts: 0, media_bytes: 0 };
       });
-      (foodCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].food++; });
-      (fitCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].fitness++; });
-      (sleepCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].sleep++; });
-      (weightCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].weight++; });
-      (habitCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].habits++; });
+      (foodRows || []).forEach(r => {
+        if (countMap[r.user_id]) {
+          countMap[r.user_id].food++;
+          if (r.image_url) countMap[r.user_id].media_bytes += r.image_url.length;
+        }
+      });
+      (fitRows || []).forEach(r => {
+        if (countMap[r.user_id]) {
+          countMap[r.user_id].fitness++;
+          if (r.image_url) countMap[r.user_id].media_bytes += r.image_url.length;
+        }
+      });
+      (sleepRows || []).forEach(r => {
+        if (countMap[r.user_id]) {
+          countMap[r.user_id].sleep++;
+          if (r.image_url) countMap[r.user_id].media_bytes += r.image_url.length;
+        }
+      });
+      (weightRows || []).forEach(r => {
+        if (countMap[r.user_id]) {
+          countMap[r.user_id].weight++;
+          if (r.image_url) countMap[r.user_id].media_bytes += r.image_url.length;
+        }
+      });
+      (habitRows || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].habits++; });
+      (sessionRows || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].sessions++; });
+      (wsRows || []).forEach(r => {
+        if (countMap[r.user_id]) {
+          countMap[r.user_id].workouts++;
+          if (r.garmin_image_url) countMap[r.user_id].media_bytes += r.garmin_image_url.length;
+        }
+      });
 
       const clientsWithStats = (clientList || []).map(c => ({
         ...c,
-        stats: countMap[c.id] || { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0 }
+        stats: countMap[c.id] || { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0, sessions: 0, workouts: 0, media_bytes: 0 }
       }));
 
       return { clients: clientsWithStats, active_user_id: activeUserId };
@@ -698,8 +858,122 @@ window.FYN_SUPABASE = {
       };
     }
 
+    // 6c. Admin Client Data Deletion / Space Cleanup (/api/admin/delete-client-data)
+    if (path === '/api/admin/delete-client-data' && method === 'POST') {
+      if (!activeUser || activeUser.role !== 'admin') {
+        throw new Error('Forbidden: Only administrators can delete client data.');
+      }
+      const targetClientId = parseInt(body.client_id || body.user_id, 10);
+      const mode = body.mode || 'telemetry_only'; // 'images_only' | 'telemetry_only' | 'full_account'
+      if (!targetClientId) throw new Error('Missing client_id parameter.');
+
+      const { data: targetRows } = await sb.from('users').select('id, username, name, role').eq('id', targetClientId).limit(1);
+      if (!targetRows || targetRows.length === 0) {
+        throw new Error('Client record not found.');
+      }
+      const targetClient = targetRows[0];
+
+      if (mode === 'full_account' && (targetClientId === activeUserId || (activeUserId === 5 && targetClientId === 5))) {
+        throw new Error('Safety protection: You cannot delete the currently signed-in administrator account. Use "Clear Telemetry" or "Clear Photos" instead.');
+      }
+
+      if (mode === 'images_only') {
+        await Promise.all([
+          sb.from('food_logs').update({ image_url: '' }).eq('user_id', targetClientId),
+          sb.from('fitness_logs').update({ image_url: '' }).eq('user_id', targetClientId),
+          sb.from('sleep_logs').update({ image_url: '' }).eq('user_id', targetClientId),
+          sb.from('weight_logs').update({ image_url: '' }).eq('user_id', targetClientId),
+          sb.from('workout_sessions').update({ garmin_image_url: '' }).eq('user_id', targetClientId)
+        ]);
+        // Prune stale sessions except active token
+        if (token) {
+          await sb.from('sessions').delete().eq('user_id', targetClientId).neq('token', token);
+        } else {
+          await sb.from('sessions').delete().eq('user_id', targetClientId);
+        }
+        return {
+          success: true,
+          mode,
+          message: `Cleared all stored photos, screenshots & stale sessions for ${targetClient.name || targetClient.username} to free database space.`
+        };
+      }
+
+      if (mode === 'telemetry_only') {
+        await Promise.all([
+          sb.from('food_logs').delete().eq('user_id', targetClientId),
+          sb.from('fitness_logs').delete().eq('user_id', targetClientId),
+          sb.from('sleep_logs').delete().eq('user_id', targetClientId),
+          sb.from('weight_logs').delete().eq('user_id', targetClientId),
+          sb.from('daily_protocols').delete().eq('user_id', targetClientId),
+          sb.from('daily_journals').delete().eq('user_id', targetClientId),
+          sb.from('daily_ai_audits').delete().eq('user_id', targetClientId),
+          sb.from('workout_sessions').delete().eq('user_id', targetClientId)
+        ]);
+        if (token) {
+          await sb.from('sessions').delete().eq('user_id', targetClientId).neq('token', token);
+        } else {
+          await sb.from('sessions').delete().eq('user_id', targetClientId);
+        }
+        return {
+          success: true,
+          mode,
+          message: `All logged telemetry data cleared for ${targetClient.name || targetClient.username}. Account credentials & profile kept intact.`
+        };
+      }
+
+      if (mode === 'full_account') {
+        await Promise.all([
+          sb.from('food_logs').delete().eq('user_id', targetClientId),
+          sb.from('fitness_logs').delete().eq('user_id', targetClientId),
+          sb.from('sleep_logs').delete().eq('user_id', targetClientId),
+          sb.from('weight_logs').delete().eq('user_id', targetClientId),
+          sb.from('daily_protocols').delete().eq('user_id', targetClientId),
+          sb.from('daily_journals').delete().eq('user_id', targetClientId),
+          sb.from('daily_ai_audits').delete().eq('user_id', targetClientId),
+          sb.from('workout_sessions').delete().eq('user_id', targetClientId),
+          sb.from('workout_plans').delete().eq('user_id', targetClientId),
+          sb.from('meal_templates').delete().eq('user_id', targetClientId),
+          sb.from('user_settings').delete().eq('user_id', targetClientId),
+          sb.from('sessions').delete().eq('user_id', targetClientId)
+        ]);
+        const { error: delUserErr } = await sb.from('users').delete().eq('id', targetClientId);
+        if (delUserErr) throw delUserErr;
+
+        return {
+          success: true,
+          mode,
+          message: `Client account @${targetClient.username} and all associated data permanently deleted.`
+        };
+      }
+
+      throw new Error('Invalid cleanup mode specified.');
+    }
+
+    // 6d. Admin Reset Client Password (/api/admin/reset-client-password)
+    if (path === '/api/admin/reset-client-password' && method === 'POST') {
+      if (!activeUser || activeUser.role !== 'admin') {
+        throw new Error('Forbidden: Only administrators can reset client passwords.');
+      }
+      const targetClientId = parseInt(body.client_id || body.user_id, 10);
+      const newPassword = body.new_password || '';
+      if (!targetClientId || newPassword.length < 4) {
+        throw new Error('Client ID and a new password (min 4 characters) are required.');
+      }
+
+      const salt = generateRandomHex(16);
+      const passwordHash = await hashPasswordWithSalt(newPassword, salt);
+      const scopeIds = (targetClientId === 3 || targetClientId === 5) ? [3, 5] : [targetClientId];
+      const { error: updErr } = await sb.from('users').update({ salt, password_hash: passwordHash }).in('id', scopeIds);
+      if (updErr) throw updErr;
+
+      return { success: true, message: 'Client password reset successfully in Supabase Cloud.' };
+    }
+
     // 7. Switch Client Account
     if (path === '/api/auth/switch-client' && method === 'POST') {
+      if (!activeUser || activeUser.role !== 'admin') {
+        throw new Error('Forbidden: Switching accounts is restricted to administrators.');
+      }
       const targetId = parseInt(body.client_id || body.user_id, 10);
       const { data: tUsers } = await sb.from('users').select('*').eq('id', targetId).limit(1);
       if (!tUsers || tUsers.length === 0) throw new Error('Client not found');
@@ -873,6 +1147,7 @@ window.FYN_SUPABASE = {
           category: 'food',
           dish_name: f.dish_name,
           meal_type: f.meal_type || 'Food',
+          logged_time: f.logged_time || '',
           calories: f.calories,
           protein: f.protein,
           carbs: f.carbs,
@@ -881,6 +1156,19 @@ window.FYN_SUPABASE = {
           image_url: f.image_url,
           created_at: f.created_at || `${qDate}T12:00:00Z`
         });
+      });
+      protocols.forEach(p => {
+        if (p.category === 'supplement' || p.category === 'skincare') {
+          timelineEvents.push({
+            id: p.id,
+            category: p.category,
+            title: p.title,
+            scheduled_time: p.scheduled_time || '',
+            completed: !!p.completed,
+            notes: p.details || '',
+            created_at: p.created_at || `${qDate}T08:00:00Z`
+          });
+        }
       });
       fitnessItems.forEach(f => {
         timelineEvents.push({
@@ -990,6 +1278,7 @@ window.FYN_SUPABASE = {
           user_id: activeUserId,
           dish_name: body.dish_name || 'Logged Meal',
           meal_type: body.meal_type || 'Lunch',
+          logged_time: body.logged_time || '',
           calories: parseInt(body.calories || 0, 10),
           protein: parseFloat(body.protein || 0),
           carbs: parseFloat(body.carbs || 0),
@@ -1243,23 +1532,26 @@ window.FYN_SUPABASE = {
         return { items: data || [] };
       }
       if (method === 'POST') {
+        const pDate = body.protocol_date || qDate;
         const payload = {
           user_id: activeUserId,
-          protocol_date: body.protocol_date || qDate,
+          protocol_date: pDate,
           title: body.title || 'Assigned Habit',
           category: body.category || 'habit',
+          scheduled_time: body.scheduled_time || '',
           details: body.details || '',
-          completed: false
+          completed: !!body.completed
         };
         const { data, error } = await sb.from('daily_protocols').insert([payload]).select();
         if (error) throw error;
-        return { message: 'Protocol item assigned in Supabase!', item: data[0] };
+        await recalculateSupabaseAiAudit(sb, activeUserId, pDate);
+        return { message: 'Protocol item saved to Supabase!', item: data[0] };
       }
     }
 
-    // 16b. Protocol Item Delete (/api/protocol/:id)
-    if (path.startsWith('/api/protocol/') && method === 'DELETE') {
-      const id = parseInt(path.replace('/api/protocol/', ''), 10);
+    // 16b. Protocol Item Delete (/api/protocol/:id, /api/supplement/:id, /api/skincare/:id)
+    if ((path.startsWith('/api/protocol/') || path.startsWith('/api/supplement/') || path.startsWith('/api/skincare/')) && method === 'DELETE') {
+      const id = parseInt(path.split('/').pop(), 10);
       const { data: item } = await sb.from('daily_protocols').select('protocol_date').eq('id', id).maybeSingle();
       const protoDate = item?.protocol_date || new Date().toISOString().split('T')[0];
       const { error: delErr } = await sb.from('daily_protocols').delete().eq('id', id);
@@ -1332,6 +1624,24 @@ window.FYN_SUPABASE = {
 
     // 21. Meal Templates (/api/meals/templates)
     if (path === '/api/meals/templates') {
+      if (method === 'POST') {
+        const payload = {
+          user_id: activeUserId,
+          meal_name: body.meal_name || 'Planned Meal',
+          meal_type: body.meal_type || 'Lunch',
+          day_of_week: body.day_of_week || 'Usual',
+          scheduled_time: body.scheduled_time || '',
+          calories: parseInt(body.calories || 0, 10),
+          protein: parseFloat(body.protein || 0),
+          carbs: parseFloat(body.carbs || 0),
+          fat: parseFloat(body.fat || 0),
+          fiber: parseFloat(body.fiber || 0),
+          notes: body.notes || ''
+        };
+        const { data, error } = await sb.from('meal_templates').insert([payload]).select();
+        if (error) throw error;
+        return { message: 'Meal template saved to Supabase!', template: data?.[0] };
+      }
       const { data, error } = await sb.from('meal_templates').select('*').in('user_id', userScope).order('id', { ascending: true });
       if (error) throw error;
       return { templates: data || [] };
@@ -1340,7 +1650,7 @@ window.FYN_SUPABASE = {
     // 22. Quick Log Meal Template (/api/meals/quick-log)
     if (path === '/api/meals/quick-log' && method === 'POST') {
       const templateId = parseInt(body.template_id, 10);
-      const qDate = body.logged_date || new Date().toISOString().split('T')[0];
+      const qDate = body.logged_date || body.date || new Date().toISOString().split('T')[0];
 
       const { data: tList } = await sb.from('meal_templates').select('*').eq('id', templateId).limit(1);
       if (!tList || tList.length === 0) throw new Error('Meal template not found');
@@ -1350,6 +1660,7 @@ window.FYN_SUPABASE = {
         user_id: activeUserId,
         dish_name: tmpl.meal_name,
         meal_type: tmpl.meal_type,
+        logged_time: body.logged_time || tmpl.scheduled_time || '',
         calories: tmpl.calories,
         protein: tmpl.protein,
         carbs: tmpl.carbs,
@@ -1437,11 +1748,12 @@ window.FYN_SUPABASE = {
       return { message: 'Workout session deleted from Supabase cloud!' };
     }
 
-    // 27. Universal Photo Upload Bridge (/api/upload)
+    // 27. Universal Photo Upload Bridge (/api/upload) - Storage-Optimized Compression
     if (path === '/api/upload' && method === 'POST') {
       const rawImage = body.image || '';
+      const optimizedUrl = await downscaleImageForOCR(rawImage, 720, 0.72);
       return {
-        url: rawImage,
+        url: optimizedUrl,
         filename: `upload_${activeUserId}_${Date.now()}.jpg`,
         mime_type: 'image/jpeg',
         success: true
@@ -1481,8 +1793,8 @@ window.FYN_SUPABASE = {
 // Direct multimodal analysis via Google Gemini API + Tesseract.js OCR
 // ===================================================================
 
-// Downscale high-resolution mobile photos for ultra-fast OCR without memory bloat
-function downscaleImageForOCR(base64Str, maxWidth = 1000) {
+// Downscale & compress high-resolution mobile photos for fast OCR and minimal storage bloat
+function downscaleImageForOCR(base64Str, maxWidth = 1000, quality = 0.85) {
   return new Promise((resolve) => {
     try {
       if (!base64Str || typeof Image === 'undefined' || !base64Str.startsWith('data:image')) {
@@ -1492,7 +1804,7 @@ function downscaleImageForOCR(base64Str, maxWidth = 1000) {
       img.onload = () => {
         let width = img.width;
         let height = img.height;
-        if (width <= maxWidth && height <= maxWidth) return resolve(base64Str);
+        if (width <= maxWidth && height <= maxWidth && base64Str.length < 90000) return resolve(base64Str);
         if (width > height) {
           if (width > maxWidth) {
             height = Math.round((height * maxWidth) / width);
@@ -1509,7 +1821,7 @@ function downscaleImageForOCR(base64Str, maxWidth = 1000) {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.onerror = () => resolve(base64Str);
       img.src = base64Str;

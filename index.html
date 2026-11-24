@@ -35,7 +35,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   
   <!-- Monochrome Stylesheet -->
-  <link rel="stylesheet" href="css/styles.css?v=4.4.0-logo-brand-update">
+  <link rel="stylesheet" href="css/styles.css?v=4.6.0-time-fields">
 </head>
 <body>
 
@@ -192,16 +192,19 @@
         <div class="fyn-sub-tag" style="text-align: center; margin-bottom: 0.75rem; font-size: 0.75rem; letter-spacing: 0.32em;">FIND YOUR NORTH</div>
         <h2 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Access Your Performance OS</h2>
         <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
-          You are currently signed out. Please sign in to view your telemetry, meals, and workout protocols.
+          Sign in with your credentials to view your personal telemetry, meals, workouts, and biometrics.
         </p>
         <div style="display: flex; flex-direction: column; gap: 0.75rem; max-width: 300px; margin: 0 auto;">
-          <button class="btn-primary" onclick="app.quickLoginAman()" style="background: var(--text-primary); color: var(--bg-body); font-weight: 700;">
-            <i data-lucide="user-check" style="width: 17px; height: 17px;"></i>
-            <span>1-Tap Sign In: Aman Yadav</span>
+          <button class="btn-primary" onclick="app.openAuthModal('login')" style="font-weight: 700;">
+            <i data-lucide="log-in" style="width: 17px; height: 17px;"></i>
+            <span>Sign In to Your Account</span>
           </button>
-          <button class="btn-secondary" onclick="app.openAuthModal('login')">
-            <i data-lucide="log-in" style="width: 16px; height: 16px;"></i>
-            <span>Sign In with Password</span>
+          <button class="btn-secondary" onclick="app.openAuthModal('register')">
+            <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>
+            <span>Create Client Account</span>
+          </button>
+          <button type="button" class="auth-link-btn" onclick="app.openAuthModal('forgot')" style="margin-top: 0.25rem; text-align: center;">
+            Forgot Password or Need Reset?
           </button>
         </div>
       </div>
@@ -742,17 +745,23 @@
                     <input type="text" id="protocolTitle" placeholder="e.g. Hack Squats, Lat Pulldown, 3L Hydration" required>
                   </div>
 
-                  <div class="form-grid-2">
+                  <div class="form-grid-3">
                     <div class="form-group">
                       <label class="form-label">Category</label>
                       <select id="protocolCategory">
                         <option value="exercise">Exercise / Workout</option>
                         <option value="habit">Habit / Recovery</option>
+                        <option value="supplement">Supplement Intake</option>
+                        <option value="skincare">Skin Care</option>
                       </select>
                     </div>
                     <div class="form-group">
                       <label class="form-label">Date</label>
                       <input type="date" id="protocolDate">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Scheduled Time (optional)</label>
+                      <input type="time" id="protocolScheduledTime">
                     </div>
                   </div>
 
@@ -916,7 +925,7 @@
             <div id="addTemplateFormContainer" style="display: none; margin-bottom: 1.25rem; padding: 1.25rem; background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: var(--radius-md);">
               <h3 style="font-size: 0.95rem; margin-bottom: 0.85rem;">Add Template to Usual Meals / Weekly Plan</h3>
               <form id="templateForm" onsubmit="app.submitMealTemplate(event)">
-                <div class="form-grid-3">
+                <div class="form-grid-4" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem;">
                   <div class="form-group">
                     <label class="form-label">Meal Name</label>
                     <input type="text" id="tplName" placeholder="e.g. Meal 1 - Sweet Potato option" required>
@@ -942,6 +951,10 @@
                       <option value="Saturday">Saturday Plan</option>
                       <option value="Sunday">Sunday Plan</option>
                     </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Scheduled Time</label>
+                    <input type="time" id="tplScheduledTime">
                   </div>
                 </div>
 
@@ -1038,7 +1051,7 @@
                   <input type="text" id="foodDishName" placeholder="e.g. Meal 1: Whole eggs, sweet potato & whey" required>
                 </div>
 
-                <div class="form-grid-2">
+                <div class="form-grid-3">
                   <div class="form-group">
                     <label class="form-label">Meal Type</label>
                     <select id="foodMealType">
@@ -1047,6 +1060,10 @@
                       <option value="Dinner">Dinner</option>
                       <option value="Snack">Snack</option>
                     </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Time Eaten</label>
+                    <input type="time" id="foodLoggedTime">
                   </div>
                   <div class="form-group">
                     <label class="form-label">Calories (kcal)</label>
@@ -1982,7 +1999,7 @@
               <label class="form-label">Meal Name</label>
               <input type="text" id="qFoodName" placeholder="e.g. Meal 1: Whole eggs, sweet potato & whey" required>
             </div>
-            <div class="form-grid-2">
+            <div class="form-grid-3">
               <div class="form-group">
                 <label class="form-label">Meal Type</label>
                 <select id="qFoodType">
@@ -1991,6 +2008,10 @@
                   <option value="Dinner">Dinner</option>
                   <option value="Snack" selected>Snack</option>
                 </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Time</label>
+                <input type="time" id="qFoodTime">
               </div>
               <div class="form-group">
                 <label class="form-label">Calories (kcal)</label>
@@ -2131,8 +2152,16 @@
               <input type="email" id="profEmail" placeholder="aman.yadav@fynhealth.com" required>
             </div>
             <div class="form-group">
-              <label class="form-label">Change Password (Optional)</label>
-              <input type="password" id="profPassword" placeholder="Leave blank to keep unchanged">
+              <div class="auth-label-row">
+                <label class="form-label">Change Password (Optional)</label>
+                <button type="button" class="auth-link-btn" onclick="app.closeProfileModal(); app.openAuthModal('forgot');">Reset via Auth</button>
+              </div>
+              <div class="password-input-wrap">
+                <input type="password" id="profPassword" placeholder="Leave blank to keep unchanged" autocomplete="new-password">
+                <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('profPassword', this)" title="Show password" aria-label="Show password">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2160,7 +2189,12 @@
 
           <div class="form-group">
             <label class="form-label">Google Gemini API Key (Optional)</label>
-            <input type="password" id="profGeminiKey" placeholder="AIzaSy... (optional for cloud multimodal meal plate recognition)">
+            <div class="password-input-wrap">
+              <input type="password" id="profGeminiKey" placeholder="AIzaSy... (optional for cloud multimodal meal plate recognition)">
+              <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('profGeminiKey', this)" title="Show API key" aria-label="Show API key">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
             <div class="form-hint">Enables Google Gemini 1.5/2.0 multimodal food recognition alongside on-device Apple Vision OCR.</div>
           </div>
 
@@ -2238,7 +2272,7 @@
         <div style="display: flex; gap: 0.5rem;">
           <button class="btn-primary" onclick="app.openAuthModal('register')" style="width: auto; padding: 0.45rem 0.9rem; font-size: 0.8rem; height: 38px;">
             <i data-lucide="user-plus" style="width: 14px; height: 14px;"></i>
-            <span>+ Add New Client</span>
+            <span>Add New Client</span>
           </button>
         </div>
       </div>
@@ -2254,9 +2288,130 @@
 
 
   <!-- ===================================================================
-       MODAL 3: AUTH LOGIN / CREATE ACCOUNT
+       MODAL: ADMIN CLIENT DATA CLEANUP / DELETE TO SAVE SPACE
        =================================================================== -->
-  <div id="authModal" class="modal-overlay" onclick="app.closeAuthModalIfOutside(event)">
+  <div id="adminDeleteClientModal" class="modal-overlay" style="z-index: 1150;" onclick="app.closeAdminDeleteClientModalIfOutside(event)">
+    <div class="modal-dialog" style="max-width: 540px; width: 95%;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <i data-lucide="trash-2" style="width: 18px; height: 18px; color: #ef4444;"></i>
+          <h3 class="modal-title" style="margin: 0;">Delete Client Data & Save Space</h3>
+        </div>
+        <button class="modal-close-btn" onclick="app.closeAdminDeleteClientModal()">
+          <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="adminDeleteClientSummary" style="background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 0.9rem 1rem; margin-bottom: 1rem;">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; background: var(--bg-subtle); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 0.75rem 0.95rem; margin-bottom: 1rem;">
+          <span style="font-size: 0.78rem; color: var(--text-secondary);">Need a backup copy before deleting?</span>
+          <button type="button" class="btn-secondary" id="adminDeleteBackupExcelBtn" style="padding: 0.35rem 0.75rem; font-size: 0.76rem; white-space: nowrap;">
+            <i data-lucide="file-spreadsheet" style="width: 13px; height: 13px;"></i>
+            <span>Download Excel First</span>
+          </button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <button type="button" class="admin-cleanup-option" onclick="app.confirmAdminDeleteClientData('images_only')" id="btnCleanupImagesOnly">
+            <div style="padding: 0.45rem; border-radius: 8px; background: var(--bg-subtle); border: 1px solid var(--border-light); flex-shrink: 0;">
+              <i data-lucide="image-off" style="width: 18px; height: 18px;"></i>
+            </div>
+            <div>
+              <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-primary);">Delete Photos & Screenshots Only</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                Reclaims database space by clearing uploaded images/screenshots & stale sessions while keeping all calories, workouts, sleep & weight logs intact.
+              </div>
+            </div>
+          </button>
+
+          <button type="button" class="admin-cleanup-option danger-option" onclick="app.confirmAdminDeleteClientData('telemetry_only')" id="btnCleanupTelemetryOnly">
+            <div style="padding: 0.45rem; border-radius: 8px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); flex-shrink: 0;">
+              <i data-lucide="database-zap" style="width: 18px; height: 18px; color: #ef4444;"></i>
+            </div>
+            <div>
+              <div style="font-weight: 700; font-size: 0.9rem; color: #ef4444;">Clear All Client Telemetry Logs</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                Permanently deletes all food, workout, sleep, scale, journal, habit & AI audit logs for this client while keeping their account login & profile.
+              </div>
+            </div>
+          </button>
+
+          <button type="button" class="admin-cleanup-option danger-option" onclick="app.confirmAdminDeleteClientData('full_account')" id="btnCleanupFullAccount">
+            <div style="padding: 0.45rem; border-radius: 8px; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.35); flex-shrink: 0;">
+              <i data-lucide="user-x" style="width: 18px; height: 18px; color: #ef4444;"></i>
+            </div>
+            <div>
+              <div style="font-weight: 700; font-size: 0.9rem; color: #ef4444;">Delete Client Account & All Data Completely</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;" id="cleanupFullAccountDesc">
+                Permanently removes this user account, settings, templates, plans, and every telemetry record from Supabase Cloud.
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; margin-top: 1.15rem;">
+          <button type="button" class="btn-secondary" onclick="app.closeAdminDeleteClientModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===================================================================
+       MODAL: ADMIN RESET CLIENT PASSWORD
+       =================================================================== -->
+  <div id="adminResetPassModal" class="modal-overlay" style="z-index: 1150;" onclick="app.closeAdminResetPassModalIfOutside(event)">
+    <div class="modal-dialog" style="max-width: 440px; width: 95%;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <i data-lucide="key-round" style="width: 18px; height: 18px;"></i>
+          <h3 class="modal-title" style="margin: 0;">Reset Client Password</h3>
+        </div>
+        <button class="modal-close-btn" onclick="app.closeAdminResetPassModal()">
+          <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1rem;" id="adminResetPassSubtitle">
+          Set a new password for this client account.
+        </p>
+        <form id="adminResetPassForm" onsubmit="app.submitAdminResetClientPassword(event)">
+          <input type="hidden" id="adminResetTargetClientId">
+          <div class="form-group">
+            <label class="form-label">New Password</label>
+            <div class="password-input-wrap">
+              <input type="password" id="adminResetNewPassword" placeholder="Minimum 4 characters" required minlength="4" autocomplete="new-password">
+              <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('adminResetNewPassword', this)" title="Show password" aria-label="Show password">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirm New Password</label>
+            <div class="password-input-wrap">
+              <input type="password" id="adminResetConfirmPassword" placeholder="Re-enter new password" required minlength="4" autocomplete="new-password">
+              <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('adminResetConfirmPassword', this)" title="Show password" aria-label="Show password">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1rem;">
+            <button type="button" class="btn-secondary" onclick="app.closeAdminResetPassModal()">Cancel</button>
+            <button type="submit" class="btn-primary" style="width: auto;">Save New Password</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===================================================================
+       MODAL 3: AUTH LOGIN / CREATE ACCOUNT / FORGOT & RESET PASSWORD
+       =================================================================== -->
+  <div id="authModal" class="modal-overlay" style="z-index: 1100;" onclick="app.closeAuthModalIfOutside(event)">
     <div class="modal-dialog">
       <div class="modal-header">
         <h3 class="modal-title" id="authModalTitle">Client Account Access</h3>
@@ -2276,18 +2431,27 @@
         </div>
 
         <div class="auth-switch-tabs">
-          <button class="auth-tab-btn active" id="authTabLogin" onclick="app.switchAuthMode('login')">Sign In</button>
-          <button class="auth-tab-btn" id="authTabRegister" onclick="app.switchAuthMode('register')">Create Account</button>
+          <button type="button" class="auth-tab-btn active" id="authTabLogin" onclick="app.switchAuthMode('login')">Sign In</button>
+          <button type="button" class="auth-tab-btn" id="authTabRegister" onclick="app.switchAuthMode('register')">Create Account</button>
+          <button type="button" class="auth-tab-btn" id="authTabForgot" onclick="app.switchAuthMode('forgot')">Reset Password</button>
         </div>
 
         <form id="loginForm" onsubmit="app.submitLogin(event)">
           <div class="form-group">
-            <label class="form-label">Username or Email</label>
-            <input type="text" id="loginUsername" placeholder="Enter your username or email" required autocomplete="username">
+            <label class="form-label">Username, Email, or Mobile</label>
+            <input type="text" id="loginUsername" placeholder="Enter your username, email, or phone" required autocomplete="username">
           </div>
           <div class="form-group">
-            <label class="form-label">Password</label>
-            <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
+            <div class="auth-label-row">
+              <label class="form-label">Password</label>
+              <button type="button" class="auth-link-btn" onclick="app.switchAuthMode('forgot')">Forgot Password?</button>
+            </div>
+            <div class="password-input-wrap">
+              <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
+              <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('loginPassword', this)" title="Show password" aria-label="Show password">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
           </div>
           <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">Sign In to FYN</button>
         </form>
@@ -2311,10 +2475,108 @@
           </div>
           <div class="form-group">
             <label class="form-label">Password</label>
-            <input type="password" id="regPassword" placeholder="Create strong password" required autocomplete="new-password">
+            <div class="password-input-wrap">
+              <input type="password" id="regPassword" placeholder="Create strong password (min 4 chars)" required minlength="4" autocomplete="new-password">
+              <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('regPassword', this)" title="Show password" aria-label="Show password">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
           </div>
           <button type="submit" class="btn-primary">Create Client Account</button>
         </form>
+
+        <!-- FORGOT & RESET PASSWORD SECTION -->
+        <div id="forgotResetSection" style="display: none;">
+          <div class="reset-mode-toggle">
+            <button type="button" class="reset-mode-pill active" id="resetModeForgotPill" onclick="app.switchResetSubMode('forgot')">Forgot Password</button>
+            <button type="button" class="reset-mode-pill" id="resetModeKnownPill" onclick="app.switchResetSubMode('known')">Change Password</button>
+          </div>
+
+          <!-- Sub-mode A: Forgot Password (2-Step Account Recovery) -->
+          <div id="forgotFlowContainer">
+            <form id="forgotVerifyForm" onsubmit="app.submitForgotVerify(event)">
+              <div class="form-group">
+                <label class="form-label">Username, Email, or Mobile</label>
+                <input type="text" id="forgotIdentifier" placeholder="Enter your username or email" required autocomplete="username">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Verify Ownership (Phone, Email, or Full Name)</label>
+                <input type="text" id="forgotVerification" placeholder="Registered mobile, email, or full name" required>
+                <div class="form-hint">Enter a registered detail different from the field above (e.g. your phone number if signing in with username/email).</div>
+              </div>
+              <button type="submit" class="btn-primary" id="btnForgotVerify">Verify Identity & Continue</button>
+            </form>
+
+            <form id="forgotSetForm" onsubmit="app.submitForgotReset(event)" style="display: none;">
+              <div id="forgotVerifiedBanner" style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.35); color: #22c55e; padding: 0.65rem 0.85rem; border-radius: var(--radius-md); font-size: 0.8rem; font-weight: 600; margin-bottom: 1rem;">
+                ✓ Account Verified
+              </div>
+              <input type="hidden" id="forgotResetToken">
+              <div class="form-group">
+                <label class="form-label">New Password</label>
+                <div class="password-input-wrap">
+                  <input type="password" id="forgotNewPassword" placeholder="Enter new password (min 4 chars)" required minlength="4" autocomplete="new-password">
+                  <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('forgotNewPassword', this)" title="Show password" aria-label="Show password">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Confirm New Password</label>
+                <div class="password-input-wrap">
+                  <input type="password" id="forgotConfirmPassword" placeholder="Re-enter new password" required minlength="4" autocomplete="new-password">
+                  <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('forgotConfirmPassword', this)" title="Show password" aria-label="Show password">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div style="display: flex; gap: 0.65rem;">
+                <button type="button" class="btn-secondary" onclick="app.resetForgotFlow()" style="width: auto;">Start Over</button>
+                <button type="submit" class="btn-primary" style="flex: 1;">Reset Password & Sign In</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Sub-mode B: Change / Reset Known Password -->
+          <form id="knownResetForm" onsubmit="app.submitKnownPasswordReset(event)" style="display: none;">
+            <div class="form-group">
+              <label class="form-label">Username, Email, or Mobile</label>
+              <input type="text" id="knownResetIdentifier" placeholder="Enter your username, email, or phone" required autocomplete="username">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Current Password</label>
+              <div class="password-input-wrap">
+                <input type="password" id="knownCurrentPassword" placeholder="Enter current password" required autocomplete="current-password">
+                <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('knownCurrentPassword', this)" title="Show password" aria-label="Show password">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">New Password</label>
+              <div class="password-input-wrap">
+                <input type="password" id="knownNewPassword" placeholder="Minimum 4 characters" required minlength="4" autocomplete="new-password">
+                <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('knownNewPassword', this)" title="Show password" aria-label="Show password">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Confirm New Password</label>
+              <div class="password-input-wrap">
+                <input type="password" id="knownConfirmPassword" placeholder="Re-enter new password" required minlength="4" autocomplete="new-password">
+                <button type="button" class="password-toggle-btn" onclick="app.togglePasswordVisibility('knownConfirmPassword', this)" title="Show password" aria-label="Show password">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">Update Password & Sign In</button>
+          </form>
+
+          <div style="text-align: center; margin-top: 1rem;">
+            <button type="button" class="auth-link-btn" onclick="app.switchAuthMode('login')">Back to Sign In</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -2523,7 +2785,7 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <!-- SheetJS Full Library for Multi-Sheet Client Excel (.xlsx) Exports -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="js/supabase-client.js?v=4.4.0-logo-brand-update"></script>
-  <script src="js/app.js?v=4.4.0-logo-brand-update"></script>
+  <script src="js/supabase-client.js?v=4.6.0-time-fields"></script>
+  <script src="js/app.js?v=4.6.0-time-fields"></script>
 </body>
 </html>

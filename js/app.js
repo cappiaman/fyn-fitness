@@ -234,6 +234,11 @@ class FYNApp {
     const navAdminBtn = document.getElementById('navAdminBtn');
     if (headerAdminBtn) headerAdminBtn.style.display = isAdmin ? 'inline-flex' : 'none';
     if (navAdminBtn) navAdminBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+    if (!isAdmin) {
+      this.closeAdminClientsModal();
+      this.closeAdminDeleteClientModal();
+      this.closeAdminResetPassModal();
+    }
 
     // Fill profile modal & targets form
     this.populateProfileForm(user);
@@ -571,8 +576,20 @@ class FYNApp {
       if (item.category === 'food') {
         icon = 'utensils';
         title = item.dish_name;
-        tag = `${item.meal_type || 'Food'} • ${item.calories} kcal`;
+        tag = `${item.meal_type || 'Food'}${item.logged_time ? ' • ⏰ ' + item.logged_time : ''} • ${item.calories} kcal`;
         meta = `<span>P: ${item.protein}g</span> <span>C: ${item.carbs}g</span> <span>F: ${item.fat}g</span>`;
+      } else if (item.category === 'supplement') {
+        icon = 'pill';
+        title = item.title;
+        tag = `Supplement${item.scheduled_time ? ' • ⏰ ' + item.scheduled_time : ''}`;
+        meta = `<span>${item.completed ? '✓ Completed' : 'Pending Intake'}</span>`;
+        notes = item.notes || '';
+      } else if (item.category === 'skincare') {
+        icon = 'sparkles';
+        title = item.title;
+        tag = `Skin Care${item.scheduled_time ? ' • ⏰ ' + item.scheduled_time : ''}`;
+        meta = `<span>${item.completed ? '✓ Completed' : 'Scheduled Protocol'}</span>`;
+        notes = item.notes || '';
       } else if (item.category === 'fitness') {
         icon = 'watch';
         title = item.activity_type;
@@ -670,7 +687,7 @@ class FYNApp {
           <div class="meal-plan-top">
             <div>
               <div class="meal-plan-name">${t.meal_name}</div>
-              <div class="meal-plan-meta">${t.meal_type} • ${t.day_of_week}</div>
+              <div class="meal-plan-meta">${t.meal_type} • ${t.day_of_week}${t.scheduled_time ? ' • ⏰ ' + t.scheduled_time : ''}</div>
             </div>
             <button class="timeline-delete-btn" onclick="app.deleteMealTemplate(${t.id})" title="Delete template">
               <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
@@ -704,10 +721,12 @@ class FYNApp {
 
   async submitMealTemplate(e) {
     e.preventDefault();
+    const timeEl = document.getElementById('tplScheduledTime');
     const payload = {
       meal_name: document.getElementById('tplName').value,
       meal_type: document.getElementById('tplType').value,
       day_of_week: document.getElementById('tplDay').value,
+      scheduled_time: timeEl ? timeEl.value.trim() : '',
       calories: parseInt(document.getElementById('tplCal').value || 0),
       protein: parseFloat(document.getElementById('tplProtein').value || 0),
       carbs: parseFloat(document.getElementById('tplCarbs').value || 0),
@@ -796,15 +815,28 @@ class FYNApp {
       return;
     }
 
+    const catIcons = {
+      exercise: 'dumbbell',
+      habit: 'check-circle-2',
+      supplement: 'pill',
+      skincare: 'sparkles'
+    };
+
     list.innerHTML = items.map(item => `
       <div class="protocol-item-row ${item.completed ? 'completed-protocol' : ''}">
         <div class="protocol-checkbox" onclick="app.toggleProtocol(${item.id}, ${item.completed ? 0 : 1})">
           ${item.completed ? '<i data-lucide="check" style="width: 14px; height: 14px;"></i>' : ''}
         </div>
         <div style="flex: 1; min-width: 0;">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap;">
             <div class="protocol-title-text">${item.title}</div>
-            <span class="metric-badge">${item.category.toUpperCase()}</span>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              ${item.scheduled_time ? `<span class="metric-badge" style="display: inline-flex; align-items: center; gap: 3px; color: var(--gold-dark);"><i data-lucide="clock" style="width: 11px; height: 11px;"></i> ${item.scheduled_time}</span>` : ''}
+              <span class="metric-badge" style="display: inline-flex; align-items: center; gap: 4px;">
+                <i data-lucide="${catIcons[item.category] || 'activity'}" style="width: 12px; height: 12px;"></i>
+                ${item.category.toUpperCase()}
+              </span>
+            </div>
           </div>
           ${item.details ? `<div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.2rem;">${item.details}</div>` : ''}
         </div>
@@ -834,9 +866,11 @@ class FYNApp {
 
   async submitProtocolItem(e) {
     e.preventDefault();
+    const timeEl = document.getElementById('protocolScheduledTime');
     const payload = {
       title: document.getElementById('protocolTitle').value,
       category: document.getElementById('protocolCategory').value,
+      scheduled_time: timeEl ? timeEl.value.trim() : '',
       details: document.getElementById('protocolDetails').value,
       protocol_date: document.getElementById('protocolDate').value || this.selectedDate
     };
@@ -1786,12 +1820,18 @@ class FYNApp {
     }
 
     const activeId = this.adminActiveUserId || (this.currentUser ? this.currentUser.id : null);
+    const formatSize = (bytes) => {
+      if (!bytes || bytes <= 0) return '0 KB';
+      if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+      return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    };
 
     listContainer.innerHTML = clients.map(client => {
       const isActive = client.id === activeId;
       const initial = (client.name || client.username || 'U').charAt(0).toUpperCase();
       const joinedDate = client.created_at ? new Date(client.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Verified';
-      const stats = client.stats || { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0 };
+      const stats = client.stats || { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0, media_bytes: 0 };
+      const mediaSizeLabel = formatSize(stats.media_bytes || 0);
       
       const hCm = parseFloat(client.height_cm || 0);
       const wKg = parseFloat(client.weight_kg || 0);
@@ -1820,16 +1860,24 @@ class FYNApp {
               </div>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-              <button class="btn-primary btn-download-excel" onclick="app.exportClientDataToExcel(${client.id}, '${escapedUsername}')" id="btnExport_${client.id}" style="width: auto; padding: 0.45rem 0.85rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.4rem;" title="Download all telemetry in Excel (.xlsx) format">
+            <div style="display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;">
+              <button class="btn-primary btn-download-excel" onclick="app.exportClientDataToExcel(${client.id}, '${escapedUsername}')" id="btnExport_${client.id}" style="width: auto; padding: 0.45rem 0.8rem; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 0.4rem;" title="Download all telemetry in Excel (.xlsx) format">
                 <i data-lucide="file-spreadsheet" style="width: 15px; height: 15px;"></i>
                 <span>Download Excel</span>
               </button>
               ${!isActive ? `
-                <button class="btn-secondary" onclick="app.switchClient(${client.id})" style="width: auto; padding: 0.45rem 0.85rem; font-size: 0.8rem;">
+                <button class="btn-secondary" onclick="app.switchClient(${client.id})" style="width: auto; padding: 0.45rem 0.8rem; font-size: 0.78rem;">
                   <span>Switch Profile</span>
                 </button>
               ` : ''}
+              <button class="btn-secondary" onclick="app.openAdminResetPassModal(${client.id})" style="width: auto; padding: 0.45rem 0.75rem; font-size: 0.78rem;" title="Reset password for this account">
+                <i data-lucide="key-round" style="width: 14px; height: 14px;"></i>
+                <span>Reset Pass</span>
+              </button>
+              <button class="btn-secondary btn-danger-outline" onclick="app.openAdminDeleteClientModal(${client.id})" style="width: auto; padding: 0.45rem 0.75rem; font-size: 0.78rem;" title="Delete client telemetry, images, or account to save space">
+                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                <span>Delete Data</span>
+              </button>
             </div>
           </div>
 
@@ -1860,6 +1908,7 @@ class FYNApp {
             <span class="telemetry-pill"><i data-lucide="moon" style="width: 13px; height: 13px;"></i> ${stats.sleep} Sleep Logs</span>
             <span class="telemetry-pill"><i data-lucide="scale" style="width: 13px; height: 13px;"></i> ${stats.weight} Weigh-ins</span>
             <span class="telemetry-pill"><i data-lucide="check-square" style="width: 13px; height: 13px;"></i> ${stats.habits} Habit Protocols</span>
+            <span class="telemetry-pill"><i data-lucide="hard-drive" style="width: 13px; height: 13px;"></i> ${mediaSizeLabel} Stored Media</span>
           </div>
 
           ${(client.medical_history || client.blood_reports) ? `
@@ -2104,6 +2153,155 @@ class FYNApp {
   }
 
   // -------------------------------------------------------------
+  // ADMIN CLIENT DATA CLEANUP / DELETE TO SAVE SPACE & RESET PASS
+  // -------------------------------------------------------------
+  openAdminDeleteClientModal(clientId) {
+    if (!this.currentUser || this.currentUser.role !== 'admin') {
+      alert('Restricted to administrators.');
+      return;
+    }
+    const client = (this.cachedAdminClients || []).find(c => c.id === clientId);
+    if (!client) return;
+    this.pendingDeleteClient = client;
+
+    const modal = document.getElementById('adminDeleteClientModal');
+    const summaryEl = document.getElementById('adminDeleteClientSummary');
+    const backupBtn = document.getElementById('adminDeleteBackupExcelBtn');
+    const fullBtn = document.getElementById('btnCleanupFullAccount');
+    const fullDesc = document.getElementById('cleanupFullAccountDesc');
+
+    const activeId = this.adminActiveUserId || (this.currentUser ? this.currentUser.id : null);
+    const isSelf = (client.id === activeId);
+    const stats = client.stats || { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0, media_bytes: 0 };
+    const mediaKb = stats.media_bytes > 0 ? (stats.media_bytes >= 1048576 ? `${(stats.media_bytes / 1048576).toFixed(2)} MB` : `${Math.max(1, Math.round(stats.media_bytes / 1024))} KB`) : '0 KB';
+
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <div style="font-weight: 700; font-size: 0.98rem;">${client.name || client.username} <span style="font-weight: 500; color: var(--text-muted); font-size: 0.84rem;">(@${client.username} • ID #${client.id})</span></div>
+        <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.35rem;">
+          ${stats.food} meals · ${stats.fitness} workouts · ${stats.sleep} sleep logs · ${stats.weight} weigh-ins · ${stats.habits} habits · <strong>${mediaKb} stored media</strong>
+        </div>
+      `;
+    }
+
+    if (backupBtn) {
+      backupBtn.onclick = () => this.exportClientDataToExcel(client.id, client.username);
+    }
+
+    if (fullBtn) {
+      fullBtn.disabled = isSelf;
+    }
+    if (fullDesc) {
+      fullDesc.textContent = isSelf
+        ? 'Disabled on your currently active administrator session. You can still clear photos or telemetry logs above.'
+        : 'Permanently removes this user account, settings, templates, plans, and every telemetry record from Supabase Cloud.';
+    }
+
+    if (modal) modal.classList.add('open');
+    this.refreshIcons();
+  }
+
+  closeAdminDeleteClientModal() {
+    const modal = document.getElementById('adminDeleteClientModal');
+    if (modal) modal.classList.remove('open');
+    this.pendingDeleteClient = null;
+  }
+
+  closeAdminDeleteClientModalIfOutside(e) {
+    if (e.target.id === 'adminDeleteClientModal') {
+      this.closeAdminDeleteClientModal();
+    }
+  }
+
+  async confirmAdminDeleteClientData(mode) {
+    const client = this.pendingDeleteClient;
+    if (!client) return;
+
+    const actionLabels = {
+      images_only: `Delete ALL stored photos/screenshots & stale sessions for "${client.name || client.username}"? (Calories, sleep & workout metrics will stay safe.)`,
+      telemetry_only: `Permanently DELETE ALL logged telemetry data (food, workouts, sleep, scale, habits, journals) for "${client.name || client.username}"?`,
+      full_account: `PERMANENTLY DELETE "${client.name || client.username}" (@${client.username}) and ALL their telemetry, plans, settings, and account login? This cannot be undone.`
+    };
+
+    if (!window.confirm(actionLabels[mode] || 'Proceed with deletion?')) {
+      return;
+    }
+
+    try {
+      const res = await this.apiFetch('/api/admin/delete-client-data', {
+        method: 'POST',
+        body: { client_id: client.id, mode }
+      });
+      this.closeAdminDeleteClientModal();
+      this.showToast(res.message || 'Client data deleted successfully.');
+      await this.loadAdminClientsDirectory();
+      if (this.loadAdminClients) this.loadAdminClients();
+      await this.loadDashboard();
+      await this.loadAiAudit();
+    } catch (err) {
+      alert('Failed to delete client data: ' + err.message);
+    }
+  }
+
+  openAdminResetPassModal(clientId) {
+    if (!this.currentUser || this.currentUser.role !== 'admin') return;
+    const client = (this.cachedAdminClients || []).find(c => c.id === clientId);
+    if (!client) return;
+
+    const modal = document.getElementById('adminResetPassModal');
+    const idInput = document.getElementById('adminResetTargetClientId');
+    const sub = document.getElementById('adminResetPassSubtitle');
+    const pw1 = document.getElementById('adminResetNewPassword');
+    const pw2 = document.getElementById('adminResetConfirmPassword');
+
+    if (idInput) idInput.value = client.id;
+    if (sub) sub.textContent = `Set a new sign-in password for ${client.name || client.username} (@${client.username}).`;
+    if (pw1) { pw1.value = ''; pw1.type = 'password'; }
+    if (pw2) { pw2.value = ''; pw2.type = 'password'; }
+
+    if (modal) modal.classList.add('open');
+    this.refreshIcons();
+  }
+
+  closeAdminResetPassModal() {
+    const modal = document.getElementById('adminResetPassModal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  closeAdminResetPassModalIfOutside(e) {
+    if (e.target.id === 'adminResetPassModal') {
+      this.closeAdminResetPassModal();
+    }
+  }
+
+  async submitAdminResetClientPassword(e) {
+    e.preventDefault();
+    const clientId = parseInt(document.getElementById('adminResetTargetClientId')?.value || '0', 10);
+    const pw1 = document.getElementById('adminResetNewPassword')?.value || '';
+    const pw2 = document.getElementById('adminResetConfirmPassword')?.value || '';
+
+    if (pw1.length < 4) {
+      alert('Password must be at least 4 characters long.');
+      return;
+    }
+    if (pw1 !== pw2) {
+      alert('Passwords do not match. Please check both fields.');
+      return;
+    }
+
+    try {
+      const res = await this.apiFetch('/api/admin/reset-client-password', {
+        method: 'POST',
+        body: { client_id: clientId, new_password: pw1 }
+      });
+      this.closeAdminResetPassModal();
+      this.showToast(res.message || 'Client password reset successfully!');
+    } catch (err) {
+      alert('Password reset failed: ' + err.message);
+    }
+  }
+
+  // -------------------------------------------------------------
   // REAL SIGN OUT (CLEARS SESSION AND LOCKS APP)
   // -------------------------------------------------------------
   async logout() {
@@ -2328,9 +2526,11 @@ class FYNApp {
   // -------------------------------------------------------------
   async submitFood(e) {
     e.preventDefault();
+    const timeEl = document.getElementById('foodLoggedTime');
     const payload = {
       dish_name: document.getElementById('foodDishName').value,
       meal_type: document.getElementById('foodMealType').value,
+      logged_time: timeEl ? timeEl.value.trim() : '',
       calories: parseInt(document.getElementById('foodCalories').value || 0),
       protein: parseFloat(document.getElementById('foodProtein').value || 0),
       carbs: parseFloat(document.getElementById('foodCarbs').value || 0),
@@ -2466,7 +2666,7 @@ class FYNApp {
           <div class="timeline-content">
             <div class="timeline-title-row">
               <span class="timeline-title">${f.dish_name}</span>
-              <span class="timeline-tag">${f.logged_date} • ${f.meal_type}</span>
+              <span class="timeline-tag">${f.logged_date}${f.logged_time ? ' • ⏰ ' + f.logged_time : ''} • ${f.meal_type}</span>
             </div>
             ${f.notes ? `<div class="timeline-desc">${f.notes}</div>` : ''}
             <div class="timeline-metrics-strip">
@@ -2593,15 +2793,17 @@ class FYNApp {
   async deleteItem(cat, id) {
     if (!confirm(`Are you sure you want to remove this ${cat} entry?`)) return;
     try {
-      await this.apiFetch(`/api/${cat}/${id}`, { method: 'DELETE' });
+      const deleteEndpoint = (cat === 'supplement' || cat === 'skincare') ? `/api/protocol/${id}` : `/api/${cat}/${id}`;
+      await this.apiFetch(deleteEndpoint, { method: 'DELETE' });
       this.showToast('Item deleted successfully.');
       await this.loadDashboard();
       await this.loadAiAudit();
-      if (this.currentView === cat) {
+      if (this.currentView === cat || ((cat === 'supplement' || cat === 'skincare') && this.currentView === 'workout')) {
         if (cat === 'food') await this.loadFoodList();
         if (cat === 'fitness') await this.loadFitnessList();
         if (cat === 'sleep') await this.loadSleepList();
         if (cat === 'weight') await this.loadWeightList();
+        if (cat === 'supplement' || cat === 'skincare') await this.loadProtocol();
       }
     } catch (err) {
       alert('Delete failed: ' + err.message);
@@ -3606,9 +3808,11 @@ class FYNApp {
 
   async submitQuickFood(e) {
     e.preventDefault();
+    const timeEl = document.getElementById('qFoodTime');
     const payload = {
       dish_name: document.getElementById('qFoodName').value,
       meal_type: document.getElementById('qFoodType').value,
+      logged_time: timeEl ? timeEl.value.trim() : '',
       calories: parseInt(document.getElementById('qFoodCalories').value || 0),
       protein: parseFloat(document.getElementById('qFoodProtein').value || 0),
       carbs: parseFloat(document.getElementById('qFoodCarbs').value || 0),
@@ -3698,11 +3902,27 @@ class FYNApp {
   }
 
   // -------------------------------------------------------------
-  // AUTH MODAL
+  // AUTH MODAL, SHOW PASSWORD & FORGOT / RESET PASSWORD
   // -------------------------------------------------------------
+  togglePasswordVisibility(inputId, btnEl) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const isHidden = input.type === 'password';
+    input.type = isHidden ? 'text' : 'password';
+
+    if (btnEl) {
+      btnEl.title = isHidden ? 'Hide password' : 'Show password';
+      btnEl.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+      btnEl.innerHTML = isHidden
+        ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>'
+        : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+    }
+  }
+
   openAuthModal(mode = 'login') {
     const modal = document.getElementById('authModal');
     if (modal) modal.classList.add('open');
+    this.resetForgotFlow();
     this.switchAuthMode(mode);
   }
 
@@ -3718,22 +3938,71 @@ class FYNApp {
   switchAuthMode(mode) {
     const loginBtn = document.getElementById('authTabLogin');
     const regBtn = document.getElementById('authTabRegister');
+    const forgotBtn = document.getElementById('authTabForgot');
     const loginForm = document.getElementById('loginForm');
     const regForm = document.getElementById('registerForm');
+    const forgotResetSection = document.getElementById('forgotResetSection');
+    const titleEl = document.getElementById('authModalTitle');
 
-    if (mode === 'login') {
-      loginBtn.classList.add('active');
-      regBtn.classList.remove('active');
-      loginForm.style.display = 'block';
-      regForm.style.display = 'none';
-      document.getElementById('authModalTitle').textContent = 'Sign In to Client Account';
+    [loginBtn, regBtn, forgotBtn].forEach(b => b && b.classList.remove('active'));
+    if (loginForm) loginForm.style.display = 'none';
+    if (regForm) regForm.style.display = 'none';
+    if (forgotResetSection) forgotResetSection.style.display = 'none';
+
+    if (mode === 'register') {
+      if (regBtn) regBtn.classList.add('active');
+      if (regForm) regForm.style.display = 'block';
+      if (titleEl) titleEl.textContent = 'Create New Client Profile';
+    } else if (mode === 'forgot' || mode === 'reset') {
+      if (forgotBtn) forgotBtn.classList.add('active');
+      if (forgotResetSection) forgotResetSection.style.display = 'block';
+      if (titleEl) titleEl.textContent = 'Recover or Reset Password';
+
+      // Pre-fill identifier from Sign In box or active user if available
+      const typedLogin = (document.getElementById('loginUsername')?.value || this.currentUser?.username || '').trim();
+      const fIdEl = document.getElementById('forgotIdentifier');
+      const kIdEl = document.getElementById('knownResetIdentifier');
+      if (typedLogin && fIdEl && !fIdEl.value) fIdEl.value = typedLogin;
+      if (typedLogin && kIdEl && !kIdEl.value) kIdEl.value = typedLogin;
+
+      this.switchResetSubMode(mode === 'reset' ? 'known' : 'forgot');
     } else {
-      loginBtn.classList.remove('active');
-      regBtn.classList.add('active');
-      loginForm.style.display = 'none';
-      regForm.style.display = 'block';
-      document.getElementById('authModalTitle').textContent = 'Create New Client Profile';
+      if (loginBtn) loginBtn.classList.add('active');
+      if (loginForm) loginForm.style.display = 'block';
+      if (titleEl) titleEl.textContent = 'Sign In to Client Account';
     }
+  }
+
+  switchResetSubMode(subMode = 'forgot') {
+    const forgotPill = document.getElementById('resetModeForgotPill');
+    const knownPill = document.getElementById('resetModeKnownPill');
+    const forgotContainer = document.getElementById('forgotFlowContainer');
+    const knownForm = document.getElementById('knownResetForm');
+
+    if (subMode === 'known') {
+      if (forgotPill) forgotPill.classList.remove('active');
+      if (knownPill) knownPill.classList.add('active');
+      if (forgotContainer) forgotContainer.style.display = 'none';
+      if (knownForm) knownForm.style.display = 'block';
+    } else {
+      if (forgotPill) forgotPill.classList.add('active');
+      if (knownPill) knownPill.classList.remove('active');
+      if (forgotContainer) forgotContainer.style.display = 'block';
+      if (knownForm) knownForm.style.display = 'none';
+    }
+  }
+
+  resetForgotFlow() {
+    const verifyForm = document.getElementById('forgotVerifyForm');
+    const setForm = document.getElementById('forgotSetForm');
+    const tokInput = document.getElementById('forgotResetToken');
+    const newPw = document.getElementById('forgotNewPassword');
+    const confPw = document.getElementById('forgotConfirmPassword');
+    if (tokInput) tokInput.value = '';
+    if (newPw) newPw.value = '';
+    if (confPw) confPw.value = '';
+    if (verifyForm) verifyForm.style.display = 'block';
+    if (setForm) setForm.style.display = 'none';
   }
 
   async submitLogin(e) {
@@ -3759,22 +4028,105 @@ class FYNApp {
     }
   }
 
-  async quickLoginAman() {
+  async submitForgotVerify(e) {
+    e.preventDefault();
+    const identifier = document.getElementById('forgotIdentifier').value.trim();
+    const verification = document.getElementById('forgotVerification').value.trim();
+    const btn = document.getElementById('btnForgotVerify');
+    const origText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Verifying...'; }
+
     try {
-      this.showToast('Connecting to Aman Yadav profile in Supabase Cloud...');
-      const res = await this.apiFetch('/api/auth/login', {
+      const res = await this.apiFetch('/api/auth/forgot-password/verify', {
         method: 'POST',
-        body: { username: 'aman', password: 'aman123' }
+        body: { identifier, verification }
+      });
+      if (res && res.verified && res.reset_token) {
+        const tokInput = document.getElementById('forgotResetToken');
+        const banner = document.getElementById('forgotVerifiedBanner');
+        const verifyForm = document.getElementById('forgotVerifyForm');
+        const setForm = document.getElementById('forgotSetForm');
+
+        if (tokInput) tokInput.value = res.reset_token;
+        if (banner) {
+          const dispName = res.user?.name || res.user?.username || identifier;
+          banner.textContent = `✓ Identity verified for ${dispName} (@${res.user?.username || ''})`;
+        }
+        if (verifyForm) verifyForm.style.display = 'none';
+        if (setForm) setForm.style.display = 'block';
+        this.showToast('Account verified! Enter your new password.');
+      }
+    } catch (err) {
+      alert('Verification failed: ' + err.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+    }
+  }
+
+  async submitForgotReset(e) {
+    e.preventDefault();
+    const resetToken = document.getElementById('forgotResetToken').value;
+    const newPassword = document.getElementById('forgotNewPassword').value;
+    const confirmPassword = document.getElementById('forgotConfirmPassword').value;
+
+    if (newPassword.length < 4) {
+      alert('New password must be at least 4 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      alert('Passwords do not match. Please re-enter carefully.');
+      return;
+    }
+
+    try {
+      const res = await this.apiFetch('/api/auth/forgot-password/reset', {
+        method: 'POST',
+        body: { reset_token: resetToken, new_password: newPassword }
       });
       if (res && res.token) {
+        this.resetForgotFlow();
         this.token = res.token;
         localStorage.setItem('fyn_session_token', res.token);
         this.closeAuthModal();
         await this.checkAuth();
-        this.showToast(`Signed in as Aman Yadav! Telemetry loaded from Supabase Cloud.`);
+        this.showToast(res.message || 'Password reset successfully! Signed in.');
       }
     } catch (err) {
-      alert('Login error: ' + err.message);
+      alert('Password reset failed: ' + err.message);
+    }
+  }
+
+  async submitKnownPasswordReset(e) {
+    e.preventDefault();
+    const identifier = document.getElementById('knownResetIdentifier').value.trim();
+    const currentPassword = document.getElementById('knownCurrentPassword').value;
+    const newPassword = document.getElementById('knownNewPassword').value;
+    const confirmPassword = document.getElementById('knownConfirmPassword').value;
+
+    if (newPassword.length < 4) {
+      alert('New password must be at least 4 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      alert('New passwords do not match.');
+      return;
+    }
+
+    try {
+      const res = await this.apiFetch('/api/auth/change-password', {
+        method: 'POST',
+        body: { identifier, current_password: currentPassword, new_password: newPassword }
+      });
+      if (res && res.token) {
+        document.getElementById('knownResetForm').reset();
+        this.token = res.token;
+        localStorage.setItem('fyn_session_token', res.token);
+        this.closeAuthModal();
+        await this.checkAuth();
+        this.showToast(res.message || 'Password updated successfully!');
+      }
+    } catch (err) {
+      alert('Password update failed: ' + err.message);
     }
   }
 

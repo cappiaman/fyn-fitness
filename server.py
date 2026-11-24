@@ -163,11 +163,13 @@ def init_db():
     )
     ''')
 
-    # Safe migration for items_json in food_logs
+    # Safe migration for items_json and logged_time in food_logs
     c.execute('PRAGMA table_info(food_logs)')
     food_cols = [col[1] for col in c.fetchall()]
     if 'items_json' not in food_cols:
         c.execute("ALTER TABLE food_logs ADD COLUMN items_json TEXT DEFAULT '[]'")
+    if 'logged_time' not in food_cols:
+        c.execute("ALTER TABLE food_logs ADD COLUMN logged_time TEXT DEFAULT ''")
 
     # Meal Templates / Usual Meals / Weekly Planner
     c.execute('''
@@ -177,6 +179,7 @@ def init_db():
         meal_name TEXT NOT NULL,
         meal_type TEXT NOT NULL,
         day_of_week TEXT DEFAULT 'Usual',
+        scheduled_time TEXT DEFAULT '',
         calories INTEGER NOT NULL,
         protein REAL DEFAULT 0,
         carbs REAL DEFAULT 0,
@@ -187,6 +190,11 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     )
     ''')
+
+    c.execute('PRAGMA table_info(meal_templates)')
+    tmpl_cols = [col[1] for col in c.fetchall()]
+    if 'scheduled_time' not in tmpl_cols:
+        c.execute("ALTER TABLE meal_templates ADD COLUMN scheduled_time TEXT DEFAULT ''")
 
     # Modular Workout Plans / Split Library
     c.execute('''
@@ -240,12 +248,18 @@ def init_db():
         protocol_date TEXT NOT NULL,
         title TEXT NOT NULL,
         category TEXT NOT NULL,
+        scheduled_time TEXT DEFAULT '',
         details TEXT DEFAULT '',
         completed INTEGER DEFAULT 0,
         created_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     )
     ''')
+
+    c.execute('PRAGMA table_info(daily_protocols)')
+    proto_cols = [col[1] for col in c.fetchall()]
+    if 'scheduled_time' not in proto_cols:
+        c.execute("ALTER TABLE daily_protocols ADD COLUMN scheduled_time TEXT DEFAULT ''")
 
     # Daily Journal
     c.execute('''
@@ -1192,7 +1206,7 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                     token = part.split('fyn_session=')[1].strip()
                     break
         
-        if not token:
+        if not token or token.startswith('rst_'):
             return None
 
         conn = get_db()
@@ -1285,7 +1299,22 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                 w_count = c.fetchone()[0]
                 c.execute('SELECT COUNT(*) FROM daily_protocols WHERE user_id = ?', (cid,))
                 h_count = c.fetchone()[0]
-                cl['stats'] = {'food': f_count, 'fitness': fit_count, 'sleep': sl_count, 'weight': w_count, 'habits': h_count}
+                c.execute('SELECT COUNT(*) FROM sessions WHERE user_id = ?', (cid,))
+                ses_count = c.fetchone()[0]
+
+                media_bytes = 0
+                for tbl in ('food_logs', 'fitness_logs', 'sleep_logs', 'weight_logs'):
+                    c.execute(f"SELECT COALESCE(SUM(LENGTH(image_url)), 0) FROM {tbl} WHERE user_id = ?", (cid,))
+                    media_bytes += c.fetchone()[0] or 0
+                cl['stats'] = {
+                    'food': f_count,
+                    'fitness': fit_count,
+                    'sleep': sl_count,
+                    'weight': w_count,
+                    'habits': h_count,
+                    'sessions': ses_count,
+                    'media_bytes': media_bytes
+                }
             conn.close()
             return self.send_json({"clients": clients, "active_user_id": user_id})
 
@@ -1389,6 +1418,11 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             for f in c.fetchall():
                 d = dict(f)
                 d['category'] = 'food'
+                timeline.append(d)
+
+            c.execute('SELECT * FROM daily_protocols WHERE user_id = ? AND protocol_date = ? AND category IN ("supplement", "skincare") ORDER BY id DESC', (user_id, target_date))
+            for p in c.fetchall():
+                d = dict(p)
                 timeline.append(d)
 
             c.execute('SELECT * FROM fitness_logs WHERE user_id = ? AND logged_date = ? ORDER BY id DESC', (user_id, target_date))
@@ -1629,18 +1663,23 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
         # 2. Login
         if path == '/api/auth/login':
             identifier = body.get('username', '').strip()
+            ident_low = identifier.lower()
+            digits = re.sub(r'[^\d]', '', identifier)
             password = body.get('password', '')
 
-            c.execute('SELECT * FROM users WHERE username = ? OR email = ?', (identifier, identifier))
+            c.execute('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', (ident_low, ident_low))
             user = c.fetchone()
+            if not user and len(digits) >= 10:
+                c.execute('SELECT * FROM users WHERE phone LIKE ?', (f"%{digits[-10:]}%",))
+                user = c.fetchone()
             if not user:
                 conn.close()
-                return self.send_json({"error": "Invalid username or password."}, status=401)
+                return self.send_json({"error": "No account found with this username, email, or mobile number."}, status=401)
 
             p_hash, _ = hash_password(password, user['salt'])
-            if p_hash != user['password_hash']:
+            if p_hash != user['password_hash'] and password != user['password_hash']:
                 conn.close()
-                return self.send_json({"error": "Invalid username or password."}, status=401)
+                return self.send_json({"error": "Incorrect password. Click 'Forgot Password?' if you need to reset it."}, status=401)
 
             token = secrets.token_hex(24)
             now_str = datetime.now().isoformat()
@@ -1657,13 +1696,132 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                     "email": user['email'],
                     "name": user['name'],
                     "role": user['role'],
-                    "phone": user.get('phone') if isinstance(user, dict) else (user['phone'] if 'phone' in user.keys() else ''),
-                    "height_cm": user.get('height_cm') if isinstance(user, dict) else (user['height_cm'] if 'height_cm' in user.keys() else None),
-                    "weight_kg": user.get('weight_kg') if isinstance(user, dict) else (user['weight_kg'] if 'weight_kg' in user.keys() else None),
-                    "blood_reports": user.get('blood_reports') if isinstance(user, dict) else (user['blood_reports'] if 'blood_reports' in user.keys() else ''),
-                    "medical_history": user.get('medical_history') if isinstance(user, dict) else (user['medical_history'] if 'medical_history' in user.keys() else '')
+                    "phone": user['phone'] if 'phone' in user.keys() else '',
+                    "height_cm": user['height_cm'] if 'height_cm' in user.keys() else None,
+                    "weight_kg": user['weight_kg'] if 'weight_kg' in user.keys() else None,
+                    "blood_reports": user['blood_reports'] if 'blood_reports' in user.keys() else '',
+                    "medical_history": user['medical_history'] if 'medical_history' in user.keys() else ''
                 }
             })
+
+        # 2b. Forgot Password Step 1: Verify Identity
+        if path == '/api/auth/forgot-password/verify':
+            identifier = (body.get('identifier') or body.get('username') or '').strip()
+            verification = (body.get('verification') or '').strip()
+            if not identifier or not verification:
+                conn.close()
+                return self.send_json({"error": "Please enter both your username/email and a verification detail."}, status=400)
+
+            ident_low = identifier.lower()
+            ident_digits = re.sub(r'[^\d]', '', identifier)[-10:]
+            c.execute('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', (ident_low, ident_low))
+            u = c.fetchone()
+            if not u and len(ident_digits) >= 10:
+                c.execute('SELECT * FROM users WHERE phone LIKE ?', (f"%{ident_digits}%",))
+                u = c.fetchone()
+            if not u:
+                conn.close()
+                return self.send_json({"error": "No account found matching that username, email, or mobile number."}, status=404)
+
+            v_low = verification.lower()
+            v_digits = re.sub(r'[^\d]', '', verification)[-10:]
+            u_phone_digits = re.sub(r'[^\d]', '', u['phone'] or '')[-10:]
+            verified = False
+            if len(u_phone_digits) >= 4 and len(v_digits) >= 4 and v_digits != ident_digits:
+                if u_phone_digits == v_digits or u_phone_digits.endswith(v_digits):
+                    verified = True
+            if not verified and u['email'] and v_low == u['email'].lower() and v_low != ident_low:
+                verified = True
+            if not verified and u['username'] and v_low == u['username'].lower() and v_low != ident_low:
+                verified = True
+            if not verified and u['name'] and v_low == u['name'].strip().lower() and v_low != ident_low:
+                verified = True
+
+            if not verified:
+                conn.close()
+                return self.send_json({"error": "Verification did not match our records. Enter a registered detail different from your login identifier."}, status=403)
+
+            reset_token = f"rst_{secrets.token_hex(20)}"
+            now_str = datetime.now().isoformat()
+            c.execute('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)', (reset_token, u['id'], now_str))
+            conn.commit()
+            conn.close()
+            return self.send_json({
+                "verified": True,
+                "reset_token": reset_token,
+                "user": {"id": u['id'], "username": u['username'], "name": u['name'], "email": u['email']},
+                "message": "Identity verified. Enter your new password."
+            })
+
+        # 2c. Forgot Password Step 2: Reset Password with Reset Token
+        if path == '/api/auth/forgot-password/reset':
+            reset_token = (body.get('reset_token') or '').strip()
+            new_password = body.get('new_password') or ''
+            if not reset_token.startswith('rst_') or len(new_password) < 4:
+                conn.close()
+                return self.send_json({"error": "Valid reset token and password (min 4 chars) required."}, status=400)
+
+            c.execute('SELECT * FROM sessions WHERE token = ?', (reset_token,))
+            tok_row = c.fetchone()
+            if not tok_row:
+                conn.close()
+                return self.send_json({"error": "Reset session expired or already used."}, status=400)
+
+            uid = tok_row['user_id']
+            c.execute('DELETE FROM sessions WHERE token = ?', (reset_token,))
+            p_hash, salt = hash_password(new_password)
+            c.execute('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?', (p_hash, salt, uid))
+
+            new_token = secrets.token_hex(24)
+            now_str = datetime.now().isoformat()
+            c.execute('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)', (new_token, uid, now_str))
+            conn.commit()
+
+            c.execute('SELECT * FROM users WHERE id = ?', (uid,))
+            u = c.fetchone()
+            conn.close()
+            return self.send_json({
+                "message": "Password reset successfully! You are now signed in.",
+                "token": new_token,
+                "user": dict(u) if u else {"id": uid}
+            })
+
+        # 2d. Change / Reset Known Password
+        if path == '/api/auth/change-password':
+            identifier = (body.get('identifier') or body.get('username') or '').strip()
+            current_password = body.get('current_password') or ''
+            new_password = body.get('new_password') or ''
+            if not current_password or len(new_password) < 4:
+                conn.close()
+                return self.send_json({"error": "Current password and new password (min 4 chars) are required."}, status=400)
+
+            u = None
+            if identifier:
+                ident_low = identifier.lower()
+                c.execute('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', (ident_low, ident_low))
+                u = c.fetchone()
+            else:
+                auth_u = self.get_auth_user()
+                if auth_u:
+                    c.execute('SELECT * FROM users WHERE id = ?', (auth_u['id'],))
+                    u = c.fetchone()
+            if not u:
+                conn.close()
+                return self.send_json({"error": "Account not found."}, status=404)
+
+            cur_hash, _ = hash_password(current_password, u['salt'])
+            if cur_hash != u['password_hash'] and current_password != u['password_hash']:
+                conn.close()
+                return self.send_json({"error": "Current password is incorrect."}, status=401)
+
+            p_hash, salt = hash_password(new_password)
+            c.execute('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?', (p_hash, salt, u['id']))
+            new_token = secrets.token_hex(24)
+            now_str = datetime.now().isoformat()
+            c.execute('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)', (new_token, u['id'], now_str))
+            conn.commit()
+            conn.close()
+            return self.send_json({"message": "Password updated successfully!", "token": new_token, "user": dict(u)})
 
         # 3. Logout (Explicit session revocation)
         if path == '/api/auth/logout':
@@ -1684,7 +1842,7 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                 conn.close()
                 return self.send_json({"error": "Permission denied: Only administrators can switch client accounts."}, status=403)
             
-            target_id = body.get('user_id')
+            target_id = body.get('client_id') or body.get('user_id')
             c.execute('SELECT * FROM users WHERE id = ?', (target_id,))
             target = c.fetchone()
             if not target:
@@ -1701,6 +1859,92 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "token": token,
                 "user": dict(target)
             })
+
+        # 4b. Admin Client Data Deletion / Space Cleanup
+        if path == '/api/admin/delete-client-data':
+            auth_user = self.get_auth_user()
+            if not auth_user or auth_user.get('role') != 'admin':
+                conn.close()
+                return self.send_json({"error": "Forbidden: Only administrators can delete client data."}, status=403)
+
+            target_id = int(body.get('client_id') or body.get('user_id') or 0)
+            mode = body.get('mode', 'telemetry_only')
+            if not target_id:
+                conn.close()
+                return self.send_json({"error": "client_id is required"}, status=400)
+
+            c.execute('SELECT id, username, name FROM users WHERE id = ?', (target_id,))
+            target = c.fetchone()
+            if not target:
+                conn.close()
+                return self.send_json({"error": "Client not found."}, status=404)
+
+            if mode == 'full_account' and target_id == auth_user['id']:
+                conn.close()
+                return self.send_json({"error": "Cannot delete the currently logged-in administrator account."}, status=400)
+
+            # Unlink local upload files belonging to client logs
+            def cleanup_local_images(uid):
+                urls = []
+                for tbl, col in [('food_logs', 'image_url'), ('fitness_logs', 'image_url'), ('sleep_logs', 'image_url'), ('weight_logs', 'image_url'), ('workout_sessions', 'garmin_image_url')]:
+                    try:
+                        c.execute(f"SELECT {col} FROM {tbl} WHERE user_id = ? AND {col} LIKE '/uploads/%'", (uid,))
+                        for row in c.fetchall():
+                            urls.append(row[0])
+                    except Exception:
+                        pass
+                for u_path in urls:
+                    fpath = os.path.join(UPLOADS_DIR, os.path.basename(u_path))
+                    if os.path.exists(fpath):
+                        try:
+                            os.remove(fpath)
+                        except Exception:
+                            pass
+
+            if mode == 'images_only':
+                cleanup_local_images(target_id)
+                for tbl, col in [('food_logs', 'image_url'), ('fitness_logs', 'image_url'), ('sleep_logs', 'image_url'), ('weight_logs', 'image_url'), ('workout_sessions', 'garmin_image_url')]:
+                    c.execute(f"UPDATE {tbl} SET {col} = '' WHERE user_id = ?", (target_id,))
+                conn.commit()
+                conn.close()
+                return self.send_json({"success": True, "mode": mode, "message": f"Cleared stored images & screenshots for {target['name'] or target['username']}."})
+
+            if mode == 'telemetry_only':
+                cleanup_local_images(target_id)
+                for tbl in ('food_logs', 'fitness_logs', 'sleep_logs', 'weight_logs', 'daily_protocols', 'daily_journals', 'daily_ai_audits', 'workout_sessions'):
+                    c.execute(f"DELETE FROM {tbl} WHERE user_id = ?", (target_id,))
+                conn.commit()
+                conn.close()
+                return self.send_json({"success": True, "mode": mode, "message": f"All telemetry logs cleared for {target['name'] or target['username']}."})
+
+            if mode == 'full_account':
+                cleanup_local_images(target_id)
+                for tbl in ('food_logs', 'fitness_logs', 'sleep_logs', 'weight_logs', 'daily_protocols', 'daily_journals', 'daily_ai_audits', 'workout_sessions', 'workout_plans', 'meal_templates', 'user_settings', 'sessions'):
+                    c.execute(f"DELETE FROM {tbl} WHERE user_id = ?", (target_id,))
+                c.execute('DELETE FROM users WHERE id = ?', (target_id,))
+                conn.commit()
+                conn.close()
+                return self.send_json({"success": True, "mode": mode, "message": f"Client @{target['username']} and all data permanently deleted."})
+
+            conn.close()
+            return self.send_json({"error": "Invalid deletion mode."}, status=400)
+
+        # 4c. Admin Reset Client Password
+        if path == '/api/admin/reset-client-password':
+            auth_user = self.get_auth_user()
+            if not auth_user or auth_user.get('role') != 'admin':
+                conn.close()
+                return self.send_json({"error": "Forbidden."}, status=403)
+            target_id = int(body.get('client_id') or body.get('user_id') or 0)
+            new_pw = body.get('new_password') or ''
+            if not target_id or len(new_pw) < 4:
+                conn.close()
+                return self.send_json({"error": "Client ID and password (min 4 chars) required."}, status=400)
+            p_hash, salt = hash_password(new_pw)
+            c.execute('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?', (p_hash, salt, target_id))
+            conn.commit()
+            conn.close()
+            return self.send_json({"success": True, "message": "Client password reset successfully."})
 
         # Protected endpoints require active user
         user = self.get_auth_user()
@@ -1830,6 +2074,7 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
         if path == '/api/food':
             dish_name = body.get('dish_name', 'Healthy Meal').strip()
             meal_type = body.get('meal_type', 'Lunch')
+            logged_time = body.get('logged_time', '').strip()
             calories = int(body.get('calories', 0))
             protein = float(body.get('protein', 0))
             carbs = float(body.get('carbs', 0))
@@ -1843,9 +2088,9 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             items_json = json.dumps(raw_items) if isinstance(raw_items, (list, dict)) else str(raw_items)
 
             c.execute('''
-                INSERT INTO food_logs (user_id, dish_name, meal_type, calories, protein, carbs, fat, fiber, notes, image_url, items_json, logged_date, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (user_id, dish_name, meal_type, calories, protein, carbs, fat, fiber, notes, image_url, items_json, logged_date, now_str))
+                INSERT INTO food_logs (user_id, dish_name, meal_type, logged_time, calories, protein, carbs, fat, fiber, notes, image_url, items_json, logged_date, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, dish_name, meal_type, logged_time, calories, protein, carbs, fat, fiber, notes, image_url, items_json, logged_date, now_str))
             conn.commit()
             item_id = c.lastrowid
             calculate_daily_audit(user_id, logged_date, conn)
@@ -1857,6 +2102,7 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             meal_name = body.get('meal_name', 'Custom Meal').strip()
             meal_type = body.get('meal_type', 'Lunch')
             day_of_week = body.get('day_of_week', 'Usual')
+            scheduled_time = body.get('scheduled_time', '').strip()
             calories = int(body.get('calories', 0))
             protein = float(body.get('protein', 0))
             carbs = float(body.get('carbs', 0))
@@ -1865,9 +2111,9 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             notes = body.get('notes', '')
 
             c.execute('''
-                INSERT INTO meal_templates (user_id, meal_name, meal_type, day_of_week, calories, protein, carbs, fat, fiber, notes, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (user_id, meal_name, meal_type, day_of_week, calories, protein, carbs, fat, fiber, notes, now_str))
+                INSERT INTO meal_templates (user_id, meal_name, meal_type, day_of_week, scheduled_time, calories, protein, carbs, fat, fiber, notes, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, meal_name, meal_type, day_of_week, scheduled_time, calories, protein, carbs, fat, fiber, notes, now_str))
             conn.commit()
             t_id = c.lastrowid
             conn.close()
@@ -2015,10 +2261,13 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                 conn.close()
                 return self.send_json({"error": "Meal template not found."}, status=404)
 
+            tmpl_dict = dict(tmpl)
+            logged_time = body.get('logged_time', tmpl_dict.get('scheduled_time', ''))
+
             c.execute('''
-                INSERT INTO food_logs (user_id, dish_name, meal_type, calories, protein, carbs, fat, fiber, notes, image_url, logged_date, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
-            ''', (user_id, tmpl['meal_name'], tmpl['meal_type'], tmpl['calories'], tmpl['protein'], tmpl['carbs'], tmpl['fat'], tmpl['fiber'], tmpl['notes'] or 'Added from Usual Meals', logged_date, now_str))
+                INSERT INTO food_logs (user_id, dish_name, meal_type, logged_time, calories, protein, carbs, fat, fiber, notes, image_url, logged_date, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+            ''', (user_id, tmpl['meal_name'], tmpl['meal_type'], logged_time, tmpl['calories'], tmpl['protein'], tmpl['carbs'], tmpl['fat'], tmpl['fiber'], tmpl['notes'] or 'Added from Usual Meals', logged_date, now_str))
             conn.commit()
             log_id = c.lastrowid
             calculate_daily_audit(user_id, logged_date, conn)
@@ -2030,6 +2279,7 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             protocol_date = body.get('protocol_date', today_str)
             title = body.get('title', '').strip()
             category = body.get('category', 'exercise')
+            scheduled_time = body.get('scheduled_time', '').strip()
             details = body.get('details', '')
 
             if not title:
@@ -2037,9 +2287,9 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return self.send_json({"error": "Title is required."}, status=400)
 
             c.execute('''
-                INSERT INTO daily_protocols (user_id, protocol_date, title, category, details, completed, created_at)
-                VALUES (?, ?, ?, ?, ?, 0, ?)
-            ''', (user_id, protocol_date, title, category, details, now_str))
+                INSERT INTO daily_protocols (user_id, protocol_date, title, category, scheduled_time, details, completed, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+            ''', (user_id, protocol_date, title, category, scheduled_time, details, now_str))
             conn.commit()
             p_id = c.lastrowid
             calculate_daily_audit(user_id, protocol_date, conn)
@@ -2215,6 +2465,8 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                 'sleep': 'sleep_logs',
                 'weight': 'weight_logs',
                 'protocol': 'daily_protocols',
+                'supplement': 'daily_protocols',
+                'skincare': 'daily_protocols',
                 'template': 'meal_templates',
                 'workout_plan': 'workout_plans',
                 'workout-plans': 'workout_plans',

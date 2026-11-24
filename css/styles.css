@@ -1621,17 +1621,19 @@ body.light-theme .site-header {
 
 .auth-switch-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
   margin-bottom: 1.5rem;
 }
 
 .auth-tab-btn {
-  padding: 0.65rem;
+  padding: 0.65rem 0.25rem;
   text-align: center;
   border-bottom: 2px solid var(--border-light);
   color: var(--text-secondary);
   font-weight: 500;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .auth-tab-btn.active {
@@ -3549,5 +3551,142 @@ body.light-theme .garmin-brand-pill {
 .btn-download-excel:hover {
   background: #e6e6e6 !important;
   transform: translateY(-1px);
+}
+
+/* Password Visibility Toggle & Auth Recovery Controls */
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 2.75rem !important;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 0.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  padding: 0;
+}
+
+.password-toggle-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+}
+
+.auth-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.auth-label-row .form-label {
+  margin-bottom: 0;
+}
+
+.auth-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.auth-link-btn:hover {
+  color: var(--text-primary);
+}
+
+.reset-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  background: var(--bg-subtle);
+  padding: 0.3rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  margin-bottom: 1.15rem;
+}
+
+.reset-mode-pill {
+  padding: 0.45rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--transition-fast);
+}
+
+.reset-mode-pill.active {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+/* Admin Client Data Deletion & Space Cleanup UI */
+.btn-danger-outline {
+  color: #ef4444 !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  background: rgba(239, 68, 68, 0.06) !important;
+  font-weight: 600 !important;
+}
+
+.btn-danger-outline:hover {
+  background: rgba(239, 68, 68, 0.14) !important;
+  border-color: #ef4444 !important;
+}
+
+.admin-cleanup-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+  text-align: left;
+}
+
+.admin-cleanup-option:hover:not(:disabled) {
+  border-color: var(--border-white);
+  background: var(--bg-elevated);
+}
+
+.admin-cleanup-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.admin-cleanup-option.danger-option:hover:not(:disabled) {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
 }
 
