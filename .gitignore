@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temp large test files
+test_food.png
+test_icon*
+*.tmp
+
+# User upload caches (keep folder structure)
+uploads/*
+!uploads/.gitkeep
+
+# Legacy backup
+legacy_travel_backup/
+
+# Python byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment files
+.env
+.env.local

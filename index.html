@@ -1,0 +1,2319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>FYN — Health & Performance OS</title>
+  <meta name="description" content="Minimalist, black-and-white performance tracker. Sync Garmin, Sleep, Food AI analysis, HealthifyMe smart scale, daily protocol, journal, and AI audits.">
+  
+  <!-- Apple iOS Mobile Web App & Standalone Configuration -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FYN">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#000000">
+  
+  <!-- App Icons for iOS & Web Clip -->
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Fonts: Montserrat (Brand Kit Official Typography) & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Monochrome Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ===================================================================
+       GRAPHICAL MOUNTAIN LINES IN BACKGROUND AT THE BOTTOM (BLACK COLOR)
+       Strictly in background layer with zero overlap
+       =================================================================== -->
+  <div class="fyn-mountain-bg" aria-hidden="true">
+    <svg viewBox="0 0 1440 260" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Distant Mountain Ridge Contours -->
+      <path d="M0 260 L0 150 L120 115 L240 60 L360 120 L490 40 L620 130 L740 80 L880 30 L1010 110 L1140 55 L1280 140 L1440 95 L1440 260 Z" class="mountain-layer-1" />
+      <!-- Mid-tier Rugged Peaks -->
+      <path d="M0 260 L0 185 L100 145 L200 95 L310 155 L420 90 L550 170 L680 105 L810 70 L950 145 L1080 100 L1210 160 L1440 120 L1440 260 Z" class="mountain-layer-2" />
+      <!-- Foreground Sharp Graphical Mountain Peaks (Solid Black in Dark Mode, Crisp Black Outlines in Light Mode) -->
+      <path d="M0 260 L0 215 L130 170 L250 125 L370 190 L510 130 L640 200 L770 110 L900 185 L1050 125 L1200 180 L1440 145 L1440 260 Z" class="mountain-layer-3" />
+      <!-- Topographical Mountain Facets & Ridgelines -->
+      <g class="mountain-facets">
+        <line x1="250" y1="125" x2="270" y2="260" />
+        <line x1="510" y1="130" x2="495" y2="260" />
+        <line x1="770" y1="110" x2="795" y2="260" />
+        <line x1="1050" y1="125" x2="1080" y2="260" />
+        <line x1="120" y1="115" x2="140" y2="260" />
+        <line x1="490" y1="40" x2="520" y2="260" />
+        <line x1="880" y1="30" x2="905" y2="260" />
+        <line x1="1140" y1="55" x2="1170" y2="260" />
+        <line x1="250" y1="125" x2="200" y2="185" />
+        <line x1="510" y1="130" x2="440" y2="190" />
+        <line x1="770" y1="110" x2="710" y2="180" />
+        <line x1="1050" y1="125" x2="980" y2="195" />
+      </g>
+    </svg>
+  </div>
+
+  <!-- Top Sticky Navigation Bar -->
+  <header class="site-header">
+    <div class="container nav-wrapper">
+      
+      <!-- Brand Logo (Variations 1, 2 & 4 from Brand Kit) -->
+      <div class="brand-section">
+        <a href="#dashboard" class="brand-badge" onclick="app.navigate('dashboard', event)" title="FYN — Find Your North">
+          <!-- Variation 2: App Icon Badge -->
+          <div class="fyn-badge-icon">
+            <span>FYN</span><span class="fyn-star-mini">✦</span>
+          </div>
+          <!-- Variation 1: Primary Lockup with Subtitle -->
+          <div class="fyn-lockup">
+            <div class="fyn-primary-title">
+              FYN<svg class="fyn-star-svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C12 7.5 9.5 10 2 12C9.5 14 12 16.5 12 24C12 16.5 14.5 14 22 12C14.5 10 12 7.5 12 0Z"/></svg>
+            </div>
+            <div class="fyn-sub-tag">FIND YOUR NORTH</div>
+          </div>
+          <!-- Variation 4: Brand Mantra -->
+          <div class="fyn-mantra-divider"></div>
+          <div class="fyn-mantra-text">
+            <span>TRAVEL.</span>
+            <span>LEARN.</span>
+            <span>IMPROVE.</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="main-nav">
+        <button class="nav-btn active" data-view="dashboard" onclick="app.navigate('dashboard')">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-btn" data-view="protocol" onclick="app.navigate('protocol')">
+          <i data-lucide="dumbbell"></i>
+          <span>Workouts & Exercises</span>
+        </button>
+        <button class="nav-btn" data-view="food" onclick="app.navigate('food')">
+          <i data-lucide="utensils"></i>
+          <span>Food & Meals</span>
+        </button>
+        <button class="nav-btn" data-view="fitness" onclick="app.navigate('fitness')">
+          <i data-lucide="activity"></i>
+          <span>Fitness</span>
+        </button>
+        <button class="nav-btn" data-view="sleep" onclick="app.navigate('sleep')">
+          <i data-lucide="moon"></i>
+          <span>Sleep</span>
+        </button>
+        <button class="nav-btn" data-view="weight" onclick="app.navigate('weight')">
+          <i data-lucide="scale"></i>
+          <span>Scale</span>
+        </button>
+        <button class="nav-btn" data-view="journal" onclick="app.navigate('journal')">
+          <i data-lucide="book-open"></i>
+          <span>Journal</span>
+        </button>
+        <button class="nav-btn" data-view="report" onclick="app.navigate('report')">
+          <i data-lucide="file-text"></i>
+          <span>AI Audit</span>
+        </button>
+        <button class="nav-btn nav-btn-ai-highlight" data-view="ai-coach" onclick="app.navigate('ai-coach')">
+          <i data-lucide="bot"></i>
+          <span>AI Coach</span>
+        </button>
+        <button class="nav-btn" data-view="targets" onclick="app.navigate('targets')">
+          <i data-lucide="sliders"></i>
+          <span>Targets</span>
+        </button>
+      </nav>
+
+      <!-- Right Header Actions -->
+      <div class="header-actions">
+        <!-- Quick Update Button -->
+        <button class="btn-update-header" onclick="app.openQuickUpdateModal()">
+          <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i>
+          <span>Update Data</span>
+        </button>
+
+        <!-- User Profile Pill -->
+        <button class="user-pill-btn" onclick="app.openProfileModal()" id="headerUserBtn" title="Account / Profile">
+          <div class="user-avatar-circle" id="headerUserAvatar">A</div>
+          <span id="headerUserName">Aman Yadav</span>
+        </button>
+
+        <!-- Monochrome Theme Toggle -->
+        <button class="btn-icon-minimal" onclick="app.toggleTheme()" title="Toggle Monochrome Theme">
+          <i data-lucide="sun" id="themeIcon" style="width: 16px; height: 16px;"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-wrapper">
+    <div class="container">
+
+      <!-- Unauthenticated State Lock Screen -->
+      <div id="unauthenticatedLockScreen" class="unauth-card" style="display: none;">
+        <div class="fyn-badge-icon" style="width: 54px; height: 54px; font-size: 1.15rem; margin: 0 auto 0.75rem;">
+          <span>FYN</span><span class="fyn-star-mini">✦</span>
+        </div>
+        <div class="fyn-sub-tag" style="text-align: center; margin-bottom: 0.75rem; font-size: 0.75rem; letter-spacing: 0.32em;">FIND YOUR NORTH</div>
+        <h2 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Access Your Performance OS</h2>
+        <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+          You are currently signed out. Please sign in to view your telemetry, meals, and workout protocols.
+        </p>
+        <button class="btn-primary" onclick="app.openAuthModal('login')" style="max-width: 280px; margin: 0 auto;">
+          <i data-lucide="log-in" style="width: 16px; height: 16px;"></i>
+          <span>Sign In to Your Account</span>
+        </button>
+      </div>
+
+      <!-- Authenticated Content Container -->
+      <div id="authenticatedAppContent">
+
+        <!-- ===================================================================
+             VIEW 1: DASHBOARD (CENTRAL COMMAND)
+             =================================================================== -->
+        <section id="view-dashboard" class="app-view active-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1 id="greetingText">Daily Overview</h1>
+              <p>Unified telemetry across Garmin, HealthifyMe, sleep, protocol habits, and AI nutrition.</p>
+            </div>
+            
+            <div class="date-navigator">
+              <button class="date-nav-btn" onclick="app.changeDate(-1)" title="Previous Day">
+                <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+              </button>
+              <span class="current-date-label" id="dashboardDateLabel">Today</span>
+              <button class="date-nav-btn" onclick="app.changeDate(1)" title="Next Day">
+                <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+              </button>
+              <button class="date-nav-btn" onclick="app.resetToday()" title="Jump to Today">
+                <i data-lucide="calendar" style="width: 15px; height: 15px;"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- FYN Brand Triad Card (Brand Kit: Travel • Learn • Improve) -->
+          <div class="fyn-triad-hero-card">
+            <div class="fyn-triad-hero-left">
+              <div class="fyn-triad-brand-group">
+                <div class="fyn-badge-icon" style="width: 44px; height: 44px; font-size: 0.95rem;">
+                  <span>FYN</span><span class="fyn-star-mini">✦</span>
+                </div>
+                <div>
+                  <div class="fyn-primary-title" style="font-size: 1.35rem;">
+                    FYN<svg class="fyn-star-svg" viewBox="0 0 24 24" fill="currentColor" style="width: 13px; height: 13px;"><path d="M12 0C12 7.5 9.5 10 2 12C9.5 14 12 16.5 12 24C12 16.5 14.5 14 22 12C14.5 10 12 7.5 12 0Z"/></svg>
+                  </div>
+                  <div class="fyn-sub-tag">FIND YOUR NORTH</div>
+                </div>
+              </div>
+              <div class="fyn-triad-mantra-pill">
+                TRAVEL. LEARN. IMPROVE.
+              </div>
+            </div>
+
+            <div class="fyn-triad-hero-pillars">
+              <div class="fyn-pillar-card" onclick="app.navigate('fitness')" title="View Physical Exertion & Workouts">
+                <div class="fyn-pillar-icon-box">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg>
+                </div>
+                <div class="fyn-pillar-info">
+                  <div class="fyn-pillar-title">TRAVEL</div>
+                  <div class="fyn-pillar-sub">Active Exertion & Burn</div>
+                </div>
+              </div>
+
+              <div class="fyn-pillar-card" onclick="app.navigate('journal')" title="View Daily Reflection & Nutrition">
+                <div class="fyn-pillar-icon-box">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+                </div>
+                <div class="fyn-pillar-info">
+                  <div class="fyn-pillar-title">LEARN</div>
+                  <div class="fyn-pillar-sub">Bio-Tracking & Journal</div>
+                </div>
+              </div>
+
+              <div class="fyn-pillar-card" onclick="app.navigate('report')" title="View AI Performance Audit">
+                <div class="fyn-pillar-icon-box">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/><path d="M14 9h5v5"/></svg>
+                </div>
+                <div class="fyn-pillar-info">
+                  <div class="fyn-pillar-title">IMPROVE</div>
+                  <div class="fyn-pillar-sub">Algorithmic AI Audit</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live AI Audit & Real-time Day Guidance Hero Banner -->
+          <div class="audit-day-guidance-card" id="dashAuditGuidanceCard" style="margin-bottom: 1.5rem; padding: 1.25rem; background: var(--bg-card); border: 1px solid var(--border-medium); border-radius: var(--radius-lg);">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1.25rem; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 280px;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.45rem;">
+                  <span id="dashAuditPhasePill" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; padding: 0.2rem 0.55rem; background: var(--text-primary); color: var(--bg-primary); border-radius: 4px; font-weight: 700;">
+                    LIVE DAY GUIDANCE
+                  </span>
+                  <span style="font-size: 0.75rem; color: var(--text-muted);" id="dashAuditTimestamp">Real-time telemetry audit active</span>
+                </div>
+                <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.35rem;" id="dashAuditHeadline">
+                  Daily Performance & Action Plan
+                </h3>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 0.75rem;" id="dashAuditSummaryText">
+                  Evaluating nutrition compliance, physical exertion, sleep architecture, and protocol habits...
+                </p>
+                <div class="info-slide-card" style="border-left: 3px solid var(--text-primary); font-size: 0.83rem; line-height: 1.5; color: var(--text-primary);" id="dashAuditGuidanceBox">
+                  <strong id="dashAuditActionLabel">Action Plan for Today:</strong> <span id="dashAuditGuidanceText">Log your meals and execute your assigned workout split.</span>
+                </div>
+              </div>
+
+              <!-- Real-time Score Pill -->
+              <div class="info-slide-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 120px; padding: 1rem 1.25rem; text-align: center;">
+                <span style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">Audit Score</span>
+                <div style="font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: 0.25rem 0;" id="dashAuditScoreVal">0</div>
+                <span style="font-size: 0.72rem; color: var(--text-muted);">/ 100</span>
+                <a href="#report" onclick="app.navigate('report')" style="margin-top: 0.6rem; font-size: 0.75rem; color: var(--text-primary); text-decoration: underline;">
+                  Full Audit Report →
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4 Key Metric Cards -->
+          <div class="metrics-grid-4">
+            <!-- Card 1: Fuel / Nutrition -->
+            <div class="metric-card">
+              <div class="card-top">
+                <span class="metric-label">Daily Fuel</span>
+                <span class="metric-badge" id="dashFoodItemsCount">3 Meals</span>
+              </div>
+              <div class="metric-value-wrap">
+                <span class="metric-value-big" id="dashCaloriesVal">1,820</span>
+                <span class="metric-unit">/ <span id="dashCalorieTarget">2,150</span> kcal</span>
+              </div>
+              <div class="metric-progress-track">
+                <div class="metric-progress-fill" id="dashCalorieBar" style="width: 84%;"></div>
+              </div>
+              <div class="macro-breakdown-row">
+                <div class="macro-pill">
+                  <span>Protein</span>
+                  <span id="dashProteinVal">120g</span>
+                </div>
+                <div class="macro-pill">
+                  <span>Carbs</span>
+                  <span id="dashCarbsVal">118g</span>
+                </div>
+                <div class="macro-pill">
+                  <span>Fats</span>
+                  <span id="dashFatVal">90g</span>
+                </div>
+              </div>
+              <a href="#food" class="card-action-link" onclick="app.navigate('food')">
+                <span>Food & 3-Meal Diet Plan</span>
+                <i data-lucide="arrow-right" style="width: 13px; height: 13px;"></i>
+              </a>
+            </div>
+
+            <!-- Card 2: Fitness / Garmin -->
+            <div class="metric-card">
+              <div class="card-top">
+                <span class="metric-label">Garmin Activity</span>
+                <span class="metric-badge" id="dashWorkoutCount">1 Session</span>
+              </div>
+              <div class="metric-value-wrap">
+                <span class="metric-value-big" id="dashBurnVal">480</span>
+                <span class="metric-unit">kcal burned</span>
+              </div>
+              <div class="metric-progress-track">
+                <div class="metric-progress-fill" id="dashStepsBar" style="width: 68%;"></div>
+              </div>
+              <div class="macro-breakdown-row">
+                <div class="macro-pill">
+                  <span>Steps</span>
+                  <span id="dashStepsVal">6,800</span>
+                </div>
+                <div class="macro-pill">
+                  <span>Distance</span>
+                  <span id="dashDistVal">0.0 km</span>
+                </div>
+                <div class="macro-pill">
+                  <span>Avg HR</span>
+                  <span id="dashHrVal">142 bpm</span>
+                </div>
+              </div>
+              <a href="#fitness" class="card-action-link" onclick="app.navigate('fitness')">
+                <span>Fitness & Workouts</span>
+                <i data-lucide="arrow-right" style="width: 13px; height: 13px;"></i>
+              </a>
+            </div>
+
+            <!-- Card 3: Sleep & Recovery -->
+            <div class="metric-card">
+              <div class="card-top">
+                <span class="metric-label">Sleep & Recovery</span>
+                <span class="metric-badge" id="dashSleepScoreBadge">Score 88</span>
+              </div>
+              <div class="metric-value-wrap">
+                <span class="metric-value-big" id="dashSleepHoursVal">7.8</span>
+                <span class="metric-unit">hours</span>
+              </div>
+              <div class="metric-progress-track">
+                <div class="metric-progress-fill" id="dashSleepBar" style="width: 97%;"></div>
+              </div>
+              <div class="macro-breakdown-row">
+                <div class="macro-pill">
+                  <span>Deep</span>
+                  <span id="dashDeepSleepVal">1.9h</span>
+                </div>
+                <div class="macro-pill">
+                  <span>REM</span>
+                  <span id="dashRemSleepVal">2.0h</span>
+                </div>
+                <div class="macro-pill">
+                  <span>Rest HR</span>
+                  <span id="dashRestHrVal">50 bpm</span>
+                </div>
+              </div>
+              <a href="#sleep" class="card-action-link" onclick="app.navigate('sleep')">
+                <span>Sleep Analytics</span>
+                <i data-lucide="arrow-right" style="width: 13px; height: 13px;"></i>
+              </a>
+            </div>
+
+            <!-- Card 4: HealthifyMe Scale -->
+            <div class="metric-card">
+              <div class="card-top">
+                <span class="metric-label">Body Composition</span>
+                <span class="metric-badge" id="dashWeightTargetBadge">Goal: 74.0 kg</span>
+              </div>
+              <div class="metric-value-wrap">
+                <span class="metric-value-big" id="dashWeightVal">74.5</span>
+                <span class="metric-unit">kg</span>
+              </div>
+              <div class="metric-progress-track">
+                <div class="metric-progress-fill" style="width: 85%;"></div>
+              </div>
+              <div class="macro-breakdown-row">
+                <div class="macro-pill">
+                  <span>Body Fat</span>
+                  <span id="dashFatPctVal">16.8%</span>
+                </div>
+                <div class="macro-pill">
+                  <span>Muscle</span>
+                  <span id="dashMuscleVal">59.4 kg</span>
+                </div>
+                <div class="macro-pill">
+                  <span>BMI</span>
+                  <span id="dashBmiVal">23.5</span>
+                </div>
+              </div>
+              <a href="#weight" class="card-action-link" onclick="app.navigate('weight')">
+                <span>Smart Scale Tracker</span>
+                <i data-lucide="arrow-right" style="width: 13px; height: 13px;"></i>
+              </a>
+            </div>
+          </div>
+
+          <!-- Dashboard Sub-Panels -->
+          <div class="dashboard-details-grid">
+            <div class="panel-box">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <i data-lucide="list" style="width: 18px; height: 18px;"></i>
+                  <span>Today's Activity Feed</span>
+                </div>
+                <button class="btn-secondary" onclick="app.openQuickUpdateModal()" style="padding: 0.35rem 0.75rem; font-size: 0.78rem;">
+                  <i data-lucide="plus" style="width: 14px; height: 14px;"></i>
+                  <span>Add Entry</span>
+                </button>
+              </div>
+              <div id="dashboardTimeline" class="timeline-list"></div>
+            </div>
+
+            <div class="panel-box">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <i data-lucide="target" style="width: 18px; height: 18px;"></i>
+                  <span>Daily Telemetry & Protocol</span>
+                </div>
+                <button class="btn-secondary" onclick="app.navigate('targets')" style="padding: 0.35rem 0.65rem; font-size: 0.75rem;">
+                  Customize
+                </button>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                <div class="info-slide-card">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Net Caloric Position</div>
+                  <div style="font-size: 1.4rem; font-weight: 700; margin: 0.2rem 0;" id="dashNetCalories">+1,340 kcal</div>
+                  <div style="font-size: 0.78rem; color: var(--text-secondary);" id="dashCalorieVerdict">Remaining allowance: 330 kcal</div>
+                </div>
+
+                <div class="info-slide-card">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">1-Month Workout & Habits</div>
+                    <a href="#protocol" onclick="app.navigate('protocol')" style="font-size: 0.75rem; color: var(--text-primary); text-decoration: underline;">View & Check off</a>
+                  </div>
+                  <div style="font-size: 1.25rem; font-weight: 700; margin: 0.2rem 0;" id="dashProtocolSummary">4 / 9 Completed (44%)</div>
+                  <div style="font-size: 0.78rem; color: var(--text-secondary);">Day 1: Quadriceps hypertrophy & habits</div>
+                </div>
+
+                <div class="info-slide-card">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">AI Health & Performance Coach</div>
+                    <a href="#ai-coach" onclick="app.navigate('ai-coach')" style="font-size: 0.75rem; color: var(--text-primary); text-decoration: underline;">Chat with Coach</a>
+                  </div>
+                  <div style="font-size: 0.95rem; font-weight: 600; margin: 0.25rem 0;">Direct access to all your diet & workout rules</div>
+                  <div style="font-size: 0.78rem; color: var(--text-muted);">Ask about Meal 1, sets/reps, or blood reports anytime</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             VIEW 2: DAILY PROTOCOL & 1-MONTH WORKOUT PLAN (HEVY TRACKER)
+             =================================================================== -->
+        <section id="view-protocol" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>Hevy Workout Tracker & Daily Protocol</h1>
+              <p>Set-by-set weight tracking, animated exercise form, auto rest timer, RPE exertion, and Garmin HR cross-check.</p>
+            </div>
+            <div class="date-navigator">
+              <button class="date-nav-btn" onclick="app.changeDate(-1)"><i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i></button>
+              <span class="current-date-label" id="protocolDateLabel">Today</span>
+              <button class="date-nav-btn" onclick="app.changeDate(1)"><i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i></button>
+            </div>
+          </div>
+
+          <!-- Hevy Section Navigation Sub-Tabs -->
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+            <button class="btn-primary" id="btnTabHevyTracker" onclick="app.switchWorkoutSubTab('tracker')" style="width: auto; padding: 0.5rem 1rem; font-size: 0.82rem;">
+              <i data-lucide="activity" style="width: 15px; height: 15px;"></i>
+              <span>Hevy Live Workout Tracker</span>
+              <span id="hevyActiveBadgeDot" style="display: none; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-left: 4px; box-shadow: 0 0 8px #22c55e;"></span>
+            </button>
+            <button class="btn-secondary" id="btnTabWorkoutLibrary" onclick="app.switchWorkoutSubTab('library')" style="padding: 0.5rem 1rem; font-size: 0.82rem;">
+              <i data-lucide="dumbbell" style="width: 15px; height: 15px;"></i>
+              <span>Modular Split Library</span>
+            </button>
+            <button class="btn-secondary" id="btnTabDailyHabits" onclick="app.switchWorkoutSubTab('habits')" style="padding: 0.5rem 1rem; font-size: 0.82rem;">
+              <i data-lucide="check-square" style="width: 15px; height: 15px;"></i>
+              <span>Daily Protocol Checklist</span>
+            </button>
+          </div>
+
+          <!-- ===================================================================
+               SUBTAB 1: HEVY LIVE WORKOUT TRACKER
+               =================================================================== -->
+          <div id="subtab-hevy-tracker" class="hevy-tracker-container">
+            
+            <!-- When No Active Workout is Running -->
+            <div id="hevyStartPromptCard" class="panel-box" style="text-align: center; padding: 2.5rem 1.5rem;">
+              <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--bg-elevated); border: 1.5px solid var(--border-medium); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; color: var(--text-primary);">
+                <i data-lucide="dumbbell" style="width: 28px; height: 28px;"></i>
+              </div>
+              <h2 style="font-size: 1.35rem; font-weight: 800; margin-bottom: 0.4rem;">Start Your Training Session</h2>
+              <p style="font-size: 0.88rem; color: var(--text-secondary); max-width: 580px; margin: 0 auto 1.5rem; line-height: 1.5;">
+                Log weights, reps, set types, and RPE exertion in real-time. Enjoy automatic rest timers, animated form guides, and cross-check your heart rate from Garmin to feed precision telemetry directly into the AI Coach.
+              </p>
+              <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
+                <button type="button" class="btn-primary" onclick="app.startHevySession(null)" style="width: auto; padding: 0.7rem 1.5rem; font-size: 0.9rem;">
+                  <i data-lucide="play" style="width: 16px; height: 16px;"></i>
+                  <span>Start Empty Workout</span>
+                </button>
+                <button type="button" class="btn-secondary" onclick="app.switchWorkoutSubTab('library')" style="padding: 0.7rem 1.35rem; font-size: 0.9rem;">
+                  <i data-lucide="list-plus" style="width: 16px; height: 16px;"></i>
+                  <span>Pick from 7-Day Split Library</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Active Workout Area (Visible when workout is in progress) -->
+            <div id="hevyActiveWorkoutArea" style="display: none; display: flex; flex-direction: column; gap: 1.5rem;">
+              
+              <!-- Sticky Live Workout HUD -->
+              <div class="hevy-live-hud">
+                <div class="hevy-hud-left">
+                  <div class="hevy-workout-status-badge">
+                    <span class="hevy-live-dot"></span>
+                    <span>LIVE WORKOUT</span>
+                  </div>
+                  <div>
+                    <input type="text" id="hevyActiveTitleInput" value="Daily Hypertrophy Split" style="background: transparent; border: none; font-size: 1.15rem; font-weight: 800; color: var(--text-primary); outline: none; padding: 0; min-width: 220px;" placeholder="Workout Name...">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem; margin-top: 2px;">
+                      <span id="hevyActiveDateTag">Today</span> • <span id="hevyActiveFocusTag">HYPERTROPHY</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="hevy-hud-metrics">
+                  <div class="hevy-hud-stat">
+                    <span class="hevy-hud-stat-label">Elapsed Time</span>
+                    <span class="hevy-hud-timer" id="hevyLiveTimer">00:00</span>
+                  </div>
+                  <div class="hevy-hud-stat">
+                    <span class="hevy-hud-stat-label">Total Volume</span>
+                    <span class="hevy-hud-stat-val" id="hevyLiveVolume">0 kg</span>
+                  </div>
+                  <div class="hevy-hud-stat">
+                    <span class="hevy-hud-stat-label">Sets Completed</span>
+                    <span class="hevy-hud-stat-val" id="hevyLiveSetsDone">0 / 0</span>
+                  </div>
+                </div>
+
+                <div class="hevy-hud-actions">
+                  <button type="button" class="btn-secondary" onclick="app.openAddExerciseToSessionModal()" style="font-size: 0.8rem; padding: 0.55rem 0.85rem;">
+                    <i data-lucide="plus" style="width: 14px; height: 14px;"></i>
+                    <span>+ Add Exercise</span>
+                  </button>
+                  <button type="button" class="btn-finish-workout" onclick="app.finishHevySession()">
+                    <i data-lucide="check-check" style="width: 16px; height: 16px;"></i>
+                    <span>Finish Workout</span>
+                  </button>
+                  <button type="button" class="btn-secondary" onclick="app.discardHevySession()" style="padding: 0.55rem 0.65rem; color: #ef4444; border-color: #552222;" title="Discard Workout">
+                    <i data-lucide="x" style="width: 15px; height: 15px;"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Exercise Cards Container -->
+              <div id="hevyExercisesContainer" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <!-- Dynamically rendered exercises -->
+              </div>
+
+              <!-- + Add Another Exercise Button -->
+              <button type="button" class="btn-secondary" onclick="app.openAddExerciseToSessionModal()" style="padding: 0.85rem; font-size: 0.88rem; width: 100%; border-style: dashed;">
+                <i data-lucide="plus-circle" style="width: 17px; height: 17px;"></i>
+                <span>+ Add Another Exercise to this Session</span>
+              </button>
+
+              <!-- Garmin Heart Rate Cross-Check Card -->
+              <div class="garmin-crosscheck-card">
+                <div class="garmin-card-header">
+                  <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span class="garmin-brand-pill">
+                      <i data-lucide="watch" style="width: 13px; height: 13px;"></i>
+                      <span>GARMIN CONNECT™</span>
+                    </span>
+                    <h3 style="font-size: 1.05rem; font-weight: 700;">Heart Rate & Biometrics Cross-Check</h3>
+                  </div>
+                  <span id="garminVerifiedBadge" style="font-size: 0.72rem; padding: 0.2rem 0.55rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; border-radius: 4px; font-weight: 700; display: none;">
+                    ✓ Cross-Checked with Garmin Vitals
+                  </span>
+                </div>
+
+                <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5;">
+                  Upload your Garmin workout summary or heart rate graph screenshot. Our AI vision engine automatically extracts your Average Heart Rate, Peak / Max HR, Training Effect, and Recovery Hours to cross-reference with your lifting tonnage.
+                </p>
+
+                <!-- Garmin Dropzone / Upload -->
+                <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.25rem; align-items: start;">
+                  <div class="dropzone-container" style="padding: 1.5rem 1rem; margin-bottom: 0;" onclick="document.getElementById('garminFileInput').click()">
+                    <input type="file" id="garminFileInput" accept="image/*" class="file-input-hidden" onchange="app.handleGarminUpload(event)">
+                    <i data-lucide="heart-pulse" class="dropzone-icon" style="color: #ef4444; width: 36px; height: 36px;"></i>
+                    <div class="dropzone-text">
+                      <h4 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 2px;">Upload Garmin Screenshot</h4>
+                      <p style="font-size: 0.75rem;">Tap or drag Garmin HR graph here</p>
+                    </div>
+                  </div>
+
+                  <!-- Extracted Garmin Vitals Display -->
+                  <div class="garmin-vitals-grid">
+                    <div class="garmin-vital-box">
+                      <div class="garmin-vital-label">Avg Heart Rate</div>
+                      <div class="garmin-vital-val" id="garminAvgHrVal">-- <span style="font-size: 0.75rem; font-weight: 500;">bpm</span></div>
+                      <div class="garmin-vital-sub">Target: 130–150</div>
+                    </div>
+                    <div class="garmin-vital-box">
+                      <div class="garmin-vital-label">Peak / Max HR</div>
+                      <div class="garmin-vital-val" id="garminMaxHrVal" style="color: #ef4444;">-- <span style="font-size: 0.75rem; font-weight: 500;">bpm</span></div>
+                      <div class="garmin-vital-sub">Anaerobic ceiling</div>
+                    </div>
+                    <div class="garmin-vital-box">
+                      <div class="garmin-vital-label">Training Effect</div>
+                      <div class="garmin-vital-val" id="garminTeVal" style="font-size: 1.15rem;">--</div>
+                      <div class="garmin-vital-sub" id="garminTeSub">Aerobic/Anaerobic</div>
+                    </div>
+                    <div class="garmin-vital-box">
+                      <div class="garmin-vital-label">Recovery Advisor</div>
+                      <div class="garmin-vital-val" id="garminRecVal">-- <span style="font-size: 0.75rem; font-weight: 500;">hrs</span></div>
+                      <div class="garmin-vital-sub">CNS Restoration</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Preview container if screenshot uploaded -->
+                <div id="garminPreviewContainer" style="display: none; margin-top: 0.5rem; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-light); max-height: 200px;">
+                  <img id="garminPreviewImg" src="" alt="Garmin Connect Screenshot" style="width: 100%; height: auto; object-fit: cover;">
+                </div>
+              </div>
+
+              <!-- General Workout Notes -->
+              <div class="panel-box">
+                <div class="panel-header" style="margin-bottom: 0.75rem; padding-bottom: 0.5rem;">
+                  <div class="panel-title">
+                    <i data-lucide="file-text" style="width: 16px; height: 16px;"></i>
+                    <span>Workout Notes & Subjective Feedback</span>
+                  </div>
+                </div>
+                <textarea id="hevySessionNotes" rows="2" placeholder="e.g. Great energy after Meal 1. Pushed leg press to failure on set 3. Felt hydrated, left knee felt 100% stable." style="width: 100%; background: var(--glass-bg-elevated); border: 1px solid var(--glass-border); border-radius: var(--radius-md); padding: 0.75rem; color: var(--text-primary); font-size: 0.85rem; outline: none;"></textarea>
+              </div>
+
+            </div>
+
+            <!-- Previous Completed Workout Sessions Log for Selected Date -->
+            <div id="hevyCompletedSessionsSection" style="margin-top: 1rem;">
+              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="history" style="width: 17px; height: 17px;"></i>
+                <span>Completed Workout Logs for This Date</span>
+              </h3>
+              <div id="hevyCompletedSessionsList" style="display: flex; flex-direction: column; gap: 1rem;">
+                <!-- Completed sessions rendered here -->
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ===================================================================
+               SUBTAB 3: DAILY PROTOCOL HABITS CHECKLIST
+               =================================================================== -->
+          <div id="subtab-daily-habits" style="display: none;">
+            <div class="feature-page-grid">
+              <div class="panel-box">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="check-circle-2" style="width: 18px; height: 18px;"></i>
+                    <span id="protocolProgressHeader">Today's Assigned Protocol</span>
+                  </div>
+                </div>
+                <div id="protocolItemsList" class="timeline-list"></div>
+              </div>
+
+              <div class="form-card">
+                <h2 style="font-size: 1.15rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i data-lucide="plus-square" style="width: 18px; height: 18px;"></i>
+                  <span>Assign Exercise or Habit</span>
+                </h2>
+                <p style="font-size: 0.82rem; margin-bottom: 1.25rem;">Create a custom daily exercise assignment, set/rep prescription, or recovery habit.</p>
+
+                <form id="protocolForm" onsubmit="app.submitProtocolItem(event)">
+                  <div class="form-group">
+                    <label class="form-label">Title / Name</label>
+                    <input type="text" id="protocolTitle" placeholder="e.g. Hack Squats, Lat Pulldown, 3L Hydration" required>
+                  </div>
+
+                  <div class="form-grid-2">
+                    <div class="form-group">
+                      <label class="form-label">Category</label>
+                      <select id="protocolCategory">
+                        <option value="exercise">Exercise / Workout</option>
+                        <option value="habit">Habit / Recovery</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Date</label>
+                      <input type="date" id="protocolDate">
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Details / Prescribed Sets & Reps</label>
+                    <textarea id="protocolDetails" rows="3" placeholder="e.g. 3 Sets — Rep Range: 15, 12, 10 reps (Pyramid load). Compulsory warm-up before."></textarea>
+                  </div>
+
+                  <button type="submit" class="btn-primary">
+                    <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+                    <span>Assign to Protocol</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===================================================================
+               SUBTAB 2: MODULAR WORKOUT SPLIT LIBRARY
+               =================================================================== -->
+          <div id="subtab-workout-library" style="display: none;">
+            <div class="panel-box">
+            <div class="panel-header">
+              <div class="panel-title">
+                <i data-lucide="dumbbell" style="width: 18px; height: 18px;"></i>
+                <span>Modular Workout Routine & Split Library (15, 12, 10 Rep Structure)</span>
+              </div>
+              <button class="btn-secondary" onclick="app.toggleAddWorkoutPlanForm()" style="font-size: 0.78rem; padding: 0.35rem 0.75rem;">
+                <i data-lucide="plus" style="width: 14px; height: 14px;"></i>
+                <span>Add Custom Workout Plan</span>
+              </button>
+            </div>
+
+            <!-- Dynamic Metabolic Health & Bodyweight Calibration Bar -->
+            <div class="workout-biometrics-bar">
+              <div class="workout-bio-controls">
+                <div class="workout-bio-item">
+                  <span class="workout-bio-label">Athlete Weight:</span>
+                  <div class="workout-bio-input-wrap">
+                    <input type="number" id="calcUserWeight" value="74.5" step="0.5" min="30" max="250" oninput="app.recalculateAllWorkoutMetrics()">
+                    <span class="workout-bio-unit">kg</span>
+                  </div>
+                </div>
+
+                <div class="workout-bio-item">
+                  <span class="workout-bio-label">Metabolic Health Profile:</span>
+                  <select id="calcMetabolicHealth" onchange="app.recalculateAllWorkoutMetrics()">
+                    <option value="1.15" selected>Athletic / High Lean Mass & High EPOC (1.15x)</option>
+                    <option value="1.00">Standard / Balanced Metabolism (1.00x)</option>
+                    <option value="0.90">Calibrated / Slower Metabolism (0.90x)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="workout-bio-hint">
+                MET Energy Formula: Burn = Duration × [MET × 3.5 × (Weight/200)] × Metabolic Factor
+              </div>
+            </div>
+
+            <!-- Collapsible Custom Workout Creator Form -->
+            <div id="addWorkoutPlanFormContainer" style="display: none; margin-bottom: 1.5rem; padding: 1.25rem; background: var(--bg-elevated); border: 1px solid var(--border-medium); border-radius: var(--radius-lg);">
+              <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="plus-circle" style="width: 17px; height: 17px;"></i>
+                <span>Create New Custom Workout Plan</span>
+              </h3>
+              <form onsubmit="app.submitCustomWorkoutPlan(event)">
+                <div class="form-grid-3">
+                  <div class="form-group">
+                    <label class="form-label">Plan Title / Split Name</label>
+                    <input type="text" id="wpTitle" placeholder="e.g. Upper Body Hypertrophy & Arms" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Focus / Objective</label>
+                    <select id="wpFocusTag">
+                      <option value="HYPERTROPHY" selected>HYPERTROPHY</option>
+                      <option value="STRENGTH">STRENGTH</option>
+                      <option value="CONDITIONING">CONDITIONING</option>
+                      <option value="POWER">POWER</option>
+                      <option value="REST & RESET">REST & RESET</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Rep Structure</label>
+                    <input type="text" id="wpRepStructure" value="3 Sets: 15, 12, 10 Reps (Pyramid load)" required>
+                  </div>
+                </div>
+
+                <div class="form-grid-3" style="margin-top: 0.75rem;">
+                  <div class="form-group">
+                    <label class="form-label">Target Duration (Minutes)</label>
+                    <input type="number" id="wpDuration" value="50" min="15" max="120" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">MET Intensity Rate</label>
+                    <select id="wpMetValue">
+                      <option value="6.0" selected>Heavy Compound Lifting (6.0 METs)</option>
+                      <option value="5.5">Moderate Hypertrophy Training (5.5 METs)</option>
+                      <option value="7.5">HIIT / Cardio Circuit (7.5 METs)</option>
+                      <option value="4.5">Core & Accessory Lifting (4.5 METs)</option>
+                      <option value="3.0">Mobility & Active Recovery (3.0 METs)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Optimal Time Window Note</label>
+                    <input type="text" id="wpTimeWindow" value="45–55 min (Maximum testosterone-to-cortisol efficiency)">
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 0.75rem;">
+                  <label class="form-label">Exercises (1 per line with sets/reps)</label>
+                  <textarea id="wpExercises" rows="4" placeholder="Incline Dumbbell Press (3 sets: 15, 12, 10)&#10;Flat Barbell Bench Press (3 sets: 15, 12, 10)&#10;Standing Lateral Raises (3 sets: 15, 12, 10)&#10;Tricep Rope Pushdowns (3 sets: 15, 12, 10)" required></textarea>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Physiological & Metabolic Effects</label>
+                  <input type="text" id="wpMetabolicEffects" placeholder="e.g. Type II fiber recruitment, GLUT4 translocation, 14h EPOC afterburn">
+                </div>
+
+                <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem;">
+                  <button type="button" class="btn-secondary" onclick="app.toggleAddWorkoutPlanForm()">Cancel</button>
+                  <button type="submit" class="btn-primary" style="width: auto; padding: 0.5rem 1.25rem;">Save Workout Plan</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Dynamic Workout Splits Grid -->
+            <div id="workoutPlansGrid" class="workout-split-grid"></div>
+          </div>
+        </div>
+      </section>
+
+        <!-- ===================================================================
+             VIEW 3: FOOD & MEALS (AI SCANNER + THREE-MEAL PLAN)
+             =================================================================== -->
+        <section id="view-food" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>Food, Nutrition & Three-Meal Diet Plan</h1>
+              <p>Your prefilled structured diet plan: tap any planned meal to add directly into today's log, or scan food photos with AI.</p>
+            </div>
+            <button class="btn-secondary" onclick="app.navigate('dashboard')">
+              <i data-lucide="arrow-left" style="width: 15px; height: 15px;"></i>
+              <span>Back to Dashboard</span>
+            </button>
+          </div>
+
+          <!-- Section A: 3-Meal Plan & Weekly Staples (1-Tap Direct Add) -->
+          <div class="panel-box" style="margin-bottom: 1.75rem;">
+            <div class="panel-header">
+              <div class="panel-title">
+                <i data-lucide="calendar" style="width: 18px; height: 18px;"></i>
+                <span>Aman Yadav's Three-Meal Plan (1-Tap Add to Today)</span>
+              </div>
+              <button class="btn-secondary" onclick="app.toggleAddTemplateForm()" style="font-size: 0.78rem; padding: 0.35rem 0.75rem;">
+                <i data-lucide="plus" style="width: 14px; height: 14px;"></i>
+                <span>Add Planned Meal</span>
+              </button>
+            </div>
+
+            <!-- Collapsible Template Creator Form -->
+            <div id="addTemplateFormContainer" style="display: none; margin-bottom: 1.25rem; padding: 1.25rem; background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: var(--radius-md);">
+              <h3 style="font-size: 0.95rem; margin-bottom: 0.85rem;">Add Template to Usual Meals / Weekly Plan</h3>
+              <form id="templateForm" onsubmit="app.submitMealTemplate(event)">
+                <div class="form-grid-3">
+                  <div class="form-group">
+                    <label class="form-label">Meal Name</label>
+                    <input type="text" id="tplName" placeholder="e.g. Meal 1 - Sweet Potato option" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Meal Type</label>
+                    <select id="tplType">
+                      <option value="Breakfast">Breakfast</option>
+                      <option value="Lunch">Lunch</option>
+                      <option value="Dinner">Dinner</option>
+                      <option value="Snack">Snack</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Day / Frequency</label>
+                    <select id="tplDay">
+                      <option value="Usual" selected>Usual / Everyday Staple</option>
+                      <option value="Monday">Monday Plan</option>
+                      <option value="Tuesday">Tuesday Plan</option>
+                      <option value="Wednesday">Wednesday Plan</option>
+                      <option value="Thursday">Thursday Plan</option>
+                      <option value="Friday">Friday Plan</option>
+                      <option value="Saturday">Saturday Plan</option>
+                      <option value="Sunday">Sunday Plan</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-grid-4" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem;">
+                  <div class="form-group">
+                    <label class="form-label">Calories</label>
+                    <input type="number" id="tplCal" placeholder="450" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Protein (g)</label>
+                    <input type="number" step="0.1" id="tplProtein" placeholder="35">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Carbs (g)</label>
+                    <input type="number" step="0.1" id="tplCarbs" placeholder="48">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Fat (g)</label>
+                    <input type="number" step="0.1" id="tplFat" placeholder="12">
+                  </div>
+                </div>
+
+                <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem;">
+                  <button type="button" class="btn-secondary" onclick="app.toggleAddTemplateForm()">Cancel</button>
+                  <button type="submit" class="btn-primary" style="width: auto; padding: 0.5rem 1.25rem;">Save Template</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Day Filter Chips -->
+            <div class="meal-filter-bar">
+              <button class="filter-chip active" data-day="All" onclick="app.filterMealTemplates('All')">All Meals</button>
+              <button class="filter-chip" data-day="Usual" onclick="app.filterMealTemplates('Usual')">Usual Staples</button>
+              <button class="filter-chip" data-day="Monday" onclick="app.filterMealTemplates('Monday')">Mon</button>
+              <button class="filter-chip" data-day="Tuesday" onclick="app.filterMealTemplates('Tuesday')">Tue</button>
+              <button class="filter-chip" data-day="Wednesday" onclick="app.filterMealTemplates('Wednesday')">Wed</button>
+              <button class="filter-chip" data-day="Thursday" onclick="app.filterMealTemplates('Thursday')">Thu</button>
+              <button class="filter-chip" data-day="Friday" onclick="app.filterMealTemplates('Friday')">Fri</button>
+              <button class="filter-chip" data-day="Saturday" onclick="app.filterMealTemplates('Saturday')">Sat</button>
+              <button class="filter-chip" data-day="Sunday" onclick="app.filterMealTemplates('Sunday')">Sun</button>
+            </div>
+
+            <div id="usualMealsGrid" class="usual-meals-grid"></div>
+          </div>
+
+          <!-- Section B: AI Scanner & Manual Entry Grid -->
+          <div class="feature-page-grid">
+            <div class="upload-zone-card">
+              <h2 style="font-size: 1.15rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="camera" style="width: 20px; height: 20px;"></i>
+                <span>AI Photo Analysis</span>
+              </h2>
+              <p style="font-size: 0.82rem; margin-bottom: 1.25rem;">Snap or upload a photo of your meal. Google Gemini analyzes calories, portion size, and macros automatically.</p>
+
+              <div class="dropzone-container" id="foodDropzone" onclick="document.getElementById('foodFileInput').click()">
+                <input type="file" id="foodFileInput" class="file-input-hidden" accept="image/*" onchange="app.handleImageSelected(event, 'food')">
+                <i data-lucide="image" class="dropzone-icon"></i>
+                <div class="dropzone-text">
+                  <h3>Click or drag food photo here</h3>
+                  <p>Supports JPG, PNG, WEBP from your phone or camera</p>
+                </div>
+              </div>
+
+              <div id="foodPreviewBox" class="preview-container">
+                <img id="foodPreviewImg" class="preview-img" alt="Food Preview">
+                <button class="preview-overlay" onclick="app.clearPreview('food')">
+                  <i data-lucide="x" style="width: 16px; height: 16px; color: #fff;"></i>
+                </button>
+              </div>
+
+              <div id="foodAiBanner" class="ai-status-banner" style="display: none;">
+                <div class="pulse-dot"></div>
+                <span>Gemini Vision is analyzing meal components and estimating macronutrients...</span>
+              </div>
+
+              <button class="btn-primary" id="foodAnalyzeBtn" onclick="app.analyzeImage('food')" style="margin-top: 1rem; display: none;">
+                <i data-lucide="sparkles" style="width: 17px; height: 17px;"></i>
+                <span>Run AI Meal Extraction</span>
+              </button>
+            </div>
+
+            <div class="form-card">
+              <h2 style="font-size: 1.15rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="edit-3" style="width: 18px; height: 18px;"></i>
+                <span>Meal Details & Macros</span>
+              </h2>
+
+              <!-- Itemized Ingredient & Macro Breakdown Editor (HealthifyMe Style) -->
+              <div id="foodViewItemizedEditorContainer" style="display: none; margin-bottom: 1.5rem;"></div>
+
+              <form id="foodForm" onsubmit="app.submitFood(event)">
+                <div class="form-group">
+                  <label class="form-label">Dish / Meal Name</label>
+                  <input type="text" id="foodDishName" placeholder="e.g. Meal 1: Whole eggs, sweet potato & whey" required>
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Meal Type</label>
+                    <select id="foodMealType">
+                      <option value="Breakfast">Breakfast</option>
+                      <option value="Lunch" selected>Lunch</option>
+                      <option value="Dinner">Dinner</option>
+                      <option value="Snack">Snack</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Calories (kcal)</label>
+                    <input type="number" id="foodCalories" placeholder="680" required>
+                  </div>
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Protein (g)</label>
+                    <input type="number" step="0.1" id="foodProtein" placeholder="54">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Carbs (g)</label>
+                    <input type="number" step="0.1" id="foodCarbs" placeholder="46">
+                  </div>
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Fat (g)</label>
+                    <input type="number" step="0.1" id="foodFat" placeholder="26">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Fiber (g)</label>
+                    <input type="number" step="0.1" id="foodFiber" placeholder="6">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Notes / Supplements / Timing</label>
+                  <input type="text" id="foodNotes" placeholder="Diluted 1 tbsp ACV 15m prior. Calcium Citrate + D3 + Magnesium.">
+                </div>
+
+                <input type="hidden" id="foodImageUrl" value="">
+
+                <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">
+                  <i data-lucide="check" style="width: 17px; height: 17px;"></i>
+                  <span>Save to Food Log & Sync Dashboard</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div class="panel-box" style="margin-top: 1.75rem;">
+            <div class="panel-header">
+              <div class="panel-title">
+                <i data-lucide="clock" style="width: 18px; height: 18px;"></i>
+                <span>Recent Meals Log</span>
+              </div>
+            </div>
+            <div id="foodLogList" class="timeline-list"></div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             VIEW 4: FITNESS & GARMIN SCREENSHOT TRACKER
+             =================================================================== -->
+        <section id="view-fitness" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>Fitness & Garmin Tracker</h1>
+              <p>Upload screenshots from Garmin Connect, Apple Health, or Strava to auto-extract workout stats.</p>
+            </div>
+            <button class="btn-secondary" onclick="app.navigate('dashboard')">
+              <i data-lucide="arrow-left" style="width: 15px; height: 15px;"></i>
+              <span>Back to Dashboard</span>
+            </button>
+          </div>
+
+          <div class="feature-page-grid">
+            <div class="upload-zone-card">
+              <h2 style="font-size: 1.15rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="watch" style="width: 20px; height: 20px;"></i>
+                <span>Garmin / Health Screenshot Scanner</span>
+              </h2>
+              <p style="font-size: 0.82rem; margin-bottom: 1.25rem;">Share a screenshot of your finished workout. The AI reads heart rate, active calories, duration, and pace.</p>
+
+              <div class="dropzone-container" id="fitnessDropzone" onclick="document.getElementById('fitnessFileInput').click()">
+                <input type="file" id="fitnessFileInput" class="file-input-hidden" accept="image/*" onchange="app.handleImageSelected(event, 'fitness')">
+                <i data-lucide="smartphone" class="dropzone-icon"></i>
+                <div class="dropzone-text">
+                  <h3>Upload Garmin / Fitness Screenshot</h3>
+                  <p>Garmin Connect, Apple Fitness, Strava, or Samsung Health</p>
+                </div>
+              </div>
+
+              <div id="fitnessPreviewBox" class="preview-container">
+                <img id="fitnessPreviewImg" class="preview-img" alt="Fitness Preview">
+                <button class="preview-overlay" onclick="app.clearPreview('fitness')">
+                  <i data-lucide="x" style="width: 16px; height: 16px; color: #fff;"></i>
+                </button>
+              </div>
+
+              <div id="fitnessAiBanner" class="ai-status-banner" style="display: none;">
+                <div class="pulse-dot"></div>
+                <span>Reading Garmin screenshot metrics and OCR data...</span>
+              </div>
+
+              <button class="btn-primary" id="fitnessAnalyzeBtn" onclick="app.analyzeImage('fitness')" style="margin-top: 1rem; display: none;">
+                <i data-lucide="sparkles" style="width: 17px; height: 17px;"></i>
+                <span>Extract Workout Data</span>
+              </button>
+            </div>
+
+            <div class="form-card">
+              <h2 style="font-size: 1.15rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="zap" style="width: 18px; height: 18px;"></i>
+                <span>Workout Telemetry</span>
+              </h2>
+
+              <form id="fitnessForm" onsubmit="app.submitFitness(event)">
+                <div class="form-group">
+                  <label class="form-label">Activity Type</label>
+                  <input type="text" id="fitnessActivity" placeholder="e.g. Day 1: Quadriceps Hypertrophy, Tempo Run" required>
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Duration (Minutes)</label>
+                    <input type="number" id="fitnessDuration" placeholder="55" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Active Burn (kcal)</label>
+                    <input type="number" id="fitnessCalories" placeholder="480" required>
+                  </div>
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Avg Heart Rate (BPM)</label>
+                    <input type="number" id="fitnessHr" placeholder="142">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Distance (km)</label>
+                    <input type="number" step="0.01" id="fitnessDistance" placeholder="0.0">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Step Count</label>
+                  <input type="number" id="fitnessSteps" placeholder="6800">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Workout Notes</label>
+                  <input type="text" id="fitnessNotes" placeholder="Free squats (15, 12, 10 reps), Hack squats, Forward lunges.">
+                </div>
+
+                <input type="hidden" id="fitnessImageUrl" value="">
+
+                <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">
+                  <i data-lucide="check" style="width: 17px; height: 17px;"></i>
+                  <span>Save Workout & Update Dashboard</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div class="panel-box" style="margin-top: 1.75rem;">
+            <div class="panel-header">
+              <div class="panel-title">
+                <i data-lucide="clock" style="width: 18px; height: 18px;"></i>
+                <span>Workout History</span>
+              </div>
+            </div>
+            <div id="fitnessLogList" class="timeline-list"></div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             VIEW 5: SLEEP & RECOVERY TRACKER
+             =================================================================== -->
+        <section id="view-sleep" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>Sleep & Recovery Telemetry</h1>
+              <p>Upload Garmin Sleep or Apple Health sleep stage screenshots to log sleep architecture.</p>
+            </div>
+            <button class="btn-secondary" onclick="app.navigate('dashboard')">
+              <i data-lucide="arrow-left" style="width: 15px; height: 15px;"></i>
+              <span>Back to Dashboard</span>
+            </button>
+          </div>
+
+          <div class="feature-page-grid">
+            <div class="upload-zone-card">
+              <h2 style="font-size: 1.15rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="moon" style="width: 20px; height: 20px;"></i>
+                <span>Garmin Sleep Screenshot Scanner</span>
+              </h2>
+              <p style="font-size: 0.82rem; margin-bottom: 1.25rem;">Upload the sleep summary screen. The AI extracts sleep score, deep, REM, light stages, and resting HR.</p>
+
+              <div class="dropzone-container" id="sleepDropzone" onclick="document.getElementById('sleepFileInput').click()">
+                <input type="file" id="sleepFileInput" class="file-input-hidden" accept="image/*" onchange="app.handleImageSelected(event, 'sleep')">
+                <i data-lucide="bed-double" class="dropzone-icon"></i>
+                <div class="dropzone-text">
+                  <h3>Upload Sleep Screenshot</h3>
+                  <p>Garmin Connect Sleep, Whoop, Apple Health Sleep</p>
+                </div>
+              </div>
+
+              <div id="sleepPreviewBox" class="preview-container">
+                <img id="sleepPreviewImg" class="preview-img" alt="Sleep Preview">
+                <button class="preview-overlay" onclick="app.clearPreview('sleep')">
+                  <i data-lucide="x" style="width: 16px; height: 16px; color: #fff;"></i>
+                </button>
+              </div>
+
+              <div id="sleepAiBanner" class="ai-status-banner" style="display: none;">
+                <div class="pulse-dot"></div>
+                <span>Extracting sleep duration, stage breakdown, and sleep score...</span>
+              </div>
+
+              <button class="btn-primary" id="sleepAnalyzeBtn" onclick="app.analyzeImage('sleep')" style="margin-top: 1rem; display: none;">
+                <i data-lucide="sparkles" style="width: 17px; height: 17px;"></i>
+                <span>Extract Sleep Architecture</span>
+              </button>
+            </div>
+
+            <div class="form-card">
+              <h2 style="font-size: 1.15rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="battery-charging" style="width: 18px; height: 18px;"></i>
+                <span>Sleep Metrics</span>
+              </h2>
+
+              <form id="sleepForm" onsubmit="app.submitSleep(event)">
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Total Duration (Hours)</label>
+                    <input type="number" step="0.1" id="sleepHours" placeholder="7.8" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Sleep Score (0-100)</label>
+                    <input type="number" id="sleepScore" placeholder="88" required>
+                  </div>
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Deep Sleep (Hours)</label>
+                    <input type="number" step="0.1" id="sleepDeep" placeholder="1.9">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">REM Sleep (Hours)</label>
+                    <input type="number" step="0.1" id="sleepRem" placeholder="2.0">
+                  </div>
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Light Sleep (Hours)</label>
+                    <input type="number" step="0.1" id="sleepLight" placeholder="3.9">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Awake Time (Mins)</label>
+                    <input type="number" id="sleepAwake" placeholder="18">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Resting HR (BPM)</label>
+                  <input type="number" id="sleepRestHr" placeholder="50">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Notes</label>
+                  <input type="text" id="sleepNotes" placeholder="Garmin: Optimal restorative sleep with 2.0h REM">
+                </div>
+
+                <input type="hidden" id="sleepImageUrl" value="">
+
+                <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">
+                  <i data-lucide="check" style="width: 17px; height: 17px;"></i>
+                  <span>Save Sleep Log & Sync Dashboard</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div class="panel-box" style="margin-top: 1.75rem;">
+            <div class="panel-header">
+              <div class="panel-title">
+                <i data-lucide="clock" style="width: 18px; height: 18px;"></i>
+                <span>Recent Sleep History</span>
+              </div>
+            </div>
+            <div id="sleepLogList" class="timeline-list"></div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             VIEW 6: BODY SCALE & HEALTHIFYME
+             =================================================================== -->
+        <section id="view-weight" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>Body Scale & Composition</h1>
+              <p>Upload screenshots from HealthifyMe smart scale to track weight, body fat %, muscle mass, and BMI.</p>
+            </div>
+            <button class="btn-secondary" onclick="app.navigate('dashboard')">
+              <i data-lucide="arrow-left" style="width: 15px; height: 15px;"></i>
+              <span>Back to Dashboard</span>
+            </button>
+          </div>
+
+          <div class="feature-page-grid">
+            <div class="upload-zone-card">
+              <h2 style="font-size: 1.15rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="scale" style="width: 20px; height: 20px;"></i>
+                <span>HealthifyMe Scale Screenshot Scanner</span>
+              </h2>
+              <p style="font-size: 0.82rem; margin-bottom: 1.25rem;">Upload your HealthifyMe weighing scale app screenshot. The AI extracts exact weight, body fat %, and visceral fat.</p>
+
+              <div class="dropzone-container" id="weightDropzone" onclick="document.getElementById('weightFileInput').click()">
+                <input type="file" id="weightFileInput" class="file-input-hidden" accept="image/*" onchange="app.handleImageSelected(event, 'weight')">
+                <i data-lucide="smartphone" class="dropzone-icon"></i>
+                <div class="dropzone-text">
+                  <h3>Upload Scale App Screenshot</h3>
+                  <p>HealthifyMe Smart Scale, Withings, Renpho, or Mi Fit</p>
+                </div>
+              </div>
+
+              <div id="weightPreviewBox" class="preview-container">
+                <img id="weightPreviewImg" class="preview-img" alt="Scale Preview">
+                <button class="preview-overlay" onclick="app.clearPreview('weight')">
+                  <i data-lucide="x" style="width: 16px; height: 16px; color: #fff;"></i>
+                </button>
+              </div>
+
+              <div id="weightAiBanner" class="ai-status-banner" style="display: none;">
+                <div class="pulse-dot"></div>
+                <span>Parsing HealthifyMe weighing scale values...</span>
+              </div>
+
+              <button class="btn-primary" id="weightAnalyzeBtn" onclick="app.analyzeImage('weight')" style="margin-top: 1rem; display: none;">
+                <i data-lucide="sparkles" style="width: 17px; height: 17px;"></i>
+                <span>Extract Scale Data</span>
+              </button>
+            </div>
+
+            <div class="form-card">
+              <h2 style="font-size: 1.15rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="trending-down" style="width: 18px; height: 18px;"></i>
+                <span>Biometric Records</span>
+              </h2>
+
+              <form id="weightForm" onsubmit="app.submitWeight(event)">
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Weight (kg)</label>
+                    <input type="number" step="0.05" id="weightVal" placeholder="74.5" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Body Fat %</label>
+                    <input type="number" step="0.1" id="weightFatPct" placeholder="16.8">
+                  </div>
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Muscle Mass (kg)</label>
+                    <input type="number" step="0.1" id="weightMuscle" placeholder="59.4">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">BMI</label>
+                    <input type="number" step="0.1" id="weightBmi" placeholder="23.5">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Visceral Fat Level (1-20)</label>
+                  <input type="number" id="weightVisceral" placeholder="5">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Weigh-in Notes</label>
+                  <input type="text" id="weightNotes" placeholder="HealthifyMe Scale: Morning fasted weigh-in">
+                </div>
+
+                <input type="hidden" id="weightImageUrl" value="">
+
+                <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">
+                  <i data-lucide="check" style="width: 17px; height: 17px;"></i>
+                  <span>Save Scale Reading & Sync Dashboard</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div class="panel-box" style="margin-top: 1.75rem;">
+            <div class="panel-header">
+              <div class="panel-title">
+                <i data-lucide="clock" style="width: 18px; height: 18px;"></i>
+                <span>Scale History</span>
+              </div>
+            </div>
+            <div id="weightLogList" class="timeline-list"></div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             VIEW 7: DAILY JOURNAL & ACTIONABLE IMPROVEMENTS
+             =================================================================== -->
+        <section id="view-journal" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>Daily Reflection & Journal</h1>
+              <p>Reflect on how your day went, what went wrong, and capture actionable improvements for tomorrow.</p>
+            </div>
+            <div class="date-navigator">
+              <button class="date-nav-btn" onclick="app.changeDate(-1)"><i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i></button>
+              <span class="current-date-label" id="journalDateLabel">Today</span>
+              <button class="date-nav-btn" onclick="app.changeDate(1)"><i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i></button>
+            </div>
+          </div>
+
+          <form id="journalForm" onsubmit="app.submitJournal(event)" style="max-width: 860px; margin: 0 auto;">
+            <div class="journal-card-prompt">
+              <div class="journal-prompt-title">
+                <i data-lucide="smile" style="width: 18px; height: 18px;"></i>
+                <span>1. How was your day today?</span>
+              </div>
+              <div class="journal-prompt-desc">Describe your overall energy, mental clarity, physical exertion, and adherence to the Three-Meal Diet Plan.</div>
+              <textarea id="journalDaySummary" class="journal-textarea" placeholder="e.g. Followed the Three-Meal Diet Plan strictly without snacking. Had ACV 15m before Meal 1 & Meal 3. Great mind-muscle connection on Free Squats..."></textarea>
+            </div>
+
+            <div class="journal-card-prompt">
+              <div class="journal-prompt-title">
+                <i data-lucide="alert-triangle" style="width: 18px; height: 18px;"></i>
+                <span>2. What went wrong today?</span>
+              </div>
+              <div class="journal-prompt-desc">Identify any missed targets, dietary friction, unexpected fatigue, cravings, or lifting hurdles.</div>
+              <textarea id="journalWhatWentWrong" class="journal-textarea" placeholder="e.g. Slight tightness in right hip flexor during Forward Lunges. Need to spend 3 extra minutes on 90/90 hip openers during warm-up..."></textarea>
+            </div>
+
+            <div class="journal-card-prompt">
+              <div class="journal-prompt-title">
+                <i data-lucide="trending-up" style="width: 18px; height: 18px;"></i>
+                <span>3. Actionable improvements for tomorrow</span>
+              </div>
+              <div class="journal-prompt-desc">Specify concrete adjustments to execute tomorrow for Day 2 Back & Biceps and meal timing.</div>
+              <textarea id="journalActionableImprovements" class="journal-textarea" placeholder="e.g. 1) Drink 1L water with electrolytes before starting Day 2 Back & Biceps. 2) Maintain 3-meal timing without deviation. 3) Take bedtime Isabgol + Chia + Ashwagandha."></textarea>
+            </div>
+
+            <div class="journal-card-prompt">
+              <div class="journal-prompt-title">
+                <i data-lucide="battery" style="width: 18px; height: 18px;"></i>
+                <span>Subjective Energy & Focus Rating (1 to 10)</span>
+              </div>
+              <div class="journal-prompt-desc">Rate your overall day execution and physical vitality.</div>
+              <div class="rating-pills-row" id="energyRatingRow">
+                <button type="button" class="rating-pill-btn" data-val="1" onclick="app.setJournalRating(1)">1</button>
+                <button type="button" class="rating-pill-btn" data-val="2" onclick="app.setJournalRating(2)">2</button>
+                <button type="button" class="rating-pill-btn" data-val="3" onclick="app.setJournalRating(3)">3</button>
+                <button type="button" class="rating-pill-btn" data-val="4" onclick="app.setJournalRating(4)">4</button>
+                <button type="button" class="rating-pill-btn" data-val="5" onclick="app.setJournalRating(5)">5</button>
+                <button type="button" class="rating-pill-btn" data-val="6" onclick="app.setJournalRating(6)">6</button>
+                <button type="button" class="rating-pill-btn" data-val="7" onclick="app.setJournalRating(7)">7</button>
+                <button type="button" class="rating-pill-btn" data-val="8" onclick="app.setJournalRating(8)">8</button>
+                <button type="button" class="rating-pill-btn active" data-val="9" onclick="app.setJournalRating(9)">9</button>
+                <button type="button" class="rating-pill-btn" data-val="10" onclick="app.setJournalRating(10)">10</button>
+              </div>
+              <input type="hidden" id="journalEnergyVal" value="9">
+            </div>
+
+            <button type="submit" class="btn-primary" style="padding: 0.85rem; font-size: 0.95rem;">
+              <i data-lucide="save" style="width: 17px; height: 17px;"></i>
+              <span>Save Reflection to Database</span>
+            </button>
+          </form>
+        </section>
+
+        <!-- ===================================================================
+             VIEW 8: DAILY REPORT & AI AUDIT (WITH PRINT / DOWNLOAD)
+             =================================================================== -->
+        <section id="view-report" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>Daily Report & AI Audit</h1>
+              <p>Comprehensive algorithmic audit of all telemetry points with scoring across food, exercise, sleep, and recovery.</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <div class="date-navigator">
+                <button class="date-nav-btn" onclick="app.changeDate(-1)"><i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i></button>
+                <span class="current-date-label" id="reportDateLabel">Today</span>
+                <button class="date-nav-btn" onclick="app.changeDate(1)"><i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i></button>
+              </div>
+              <button class="btn-secondary" onclick="app.runAiAudit()" title="Re-calculate AI Audit">
+                <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+                <span>Re-run Audit</span>
+              </button>
+              <button class="btn-primary" onclick="window.print()" style="width: auto; padding: 0.45rem 1rem;">
+                <i data-lucide="printer" style="width: 15px; height: 15px;"></i>
+                <span>Print / Download PDF</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="printableReportContainer">
+            <div class="report-brand-header">
+              <div class="fyn-lockup">
+                <div class="fyn-primary-title" style="font-size: 1.6rem;">
+                  FYN<svg class="fyn-star-svg" viewBox="0 0 24 24" fill="currentColor" style="width: 14px; height: 14px;"><path d="M12 0C12 7.5 9.5 10 2 12C9.5 14 12 16.5 12 24C12 16.5 14.5 14 22 12C14.5 10 12 7.5 12 0Z"/></svg>
+                </div>
+                <div class="fyn-sub-tag" style="letter-spacing: 0.32em;">FIND YOUR NORTH</div>
+              </div>
+              <div class="report-brand-mantra">
+                TRAVEL. LEARN. IMPROVE.
+              </div>
+            </div>
+
+            <div class="audit-score-hero">
+              <div style="flex: 1; min-width: 260px;">
+                <span class="metric-badge" style="margin-bottom: 0.5rem; display: inline-block;">FYN Telemetry Audit</span>
+                <h2 style="font-size: 1.6rem; margin-bottom: 0.4rem;" id="auditDateHeading">Performance Report</h2>
+                <p style="font-size: 0.88rem; color: var(--text-secondary); max-width: 580px;" id="auditSummaryText">
+                  Analyzing all food logs, Garmin workouts, sleep architecture, smart scale readings, and protocol adherence...
+                </p>
+              </div>
+              <div class="audit-score-circle">
+                <span class="audit-big-number" id="auditOverallScore">92</span>
+                <span class="audit-score-label">Overall Score</span>
+              </div>
+            </div>
+
+            <div class="subscores-grid-4">
+              <div class="subscore-card">
+                <div class="subscore-val" id="auditFoodScore">95</div>
+                <div class="subscore-label">Nutrition & Macros</div>
+              </div>
+              <div class="subscore-card">
+                <div class="subscore-val" id="auditExerciseScore">92</div>
+                <div class="subscore-label">Exercise & Burn</div>
+              </div>
+              <div class="subscore-card">
+                <div class="subscore-val" id="auditSleepScore">90</div>
+                <div class="subscore-label">Sleep & Rest</div>
+              </div>
+              <div class="subscore-card">
+                <div class="subscore-val" id="auditRecoveryScore">91</div>
+                <div class="subscore-label">Habits & Recovery</div>
+              </div>
+            </div>
+
+            <div class="feature-page-grid" style="margin-bottom: 1.5rem;">
+              <div class="audit-critique-box">
+                <h3 style="font-size: 1rem; margin-bottom: 0.65rem; display: flex; align-items: center; gap: 0.45rem;">
+                  <i data-lucide="check-circle" style="width: 18px; height: 18px;"></i>
+                  <span>Strengths & Target Hits</span>
+                </h3>
+                <p style="font-size: 0.85rem; line-height: 1.6; color: var(--text-secondary);" id="auditStrengthsText">
+                  Strict adherence to no-snacking rule and ACV pre-meal timing; 1-month workout plan Day 1 executed; excellent blood sugar markers.
+                </p>
+              </div>
+
+              <div class="audit-critique-box">
+                <h3 style="font-size: 1rem; margin-bottom: 0.65rem; display: flex; align-items: center; gap: 0.45rem;">
+                  <i data-lucide="alert-circle" style="width: 18px; height: 18px;"></i>
+                  <span>Actionable Recommendations</span>
+                </h3>
+                <p style="font-size: 0.85rem; line-height: 1.6; color: var(--text-secondary);" id="auditImprovementsText">
+                  Take bedtime Isabgol + Chia + Ashwagandha protocol; drink remaining 500ml water to reach 3.5L hydration goal.
+                </p>
+              </div>
+            </div>
+
+            <div class="panel-box">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <i data-lucide="database" style="width: 18px; height: 18px;"></i>
+                  <span>Telemetry Audit Breakdown</span>
+                </div>
+              </div>
+              <div id="auditBreakdownTable" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             VIEW 9: INTERACTIVE AI HEALTH & PERFORMANCE COACH AGENT
+             =================================================================== -->
+        <section id="view-ai-coach" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>AI Health & Performance Coach</h1>
+              <p>Autonomous AI agent with live access to your 3-Meal Diet Plan, 1-Month Workout Routine, blood reports, and daily telemetry.</p>
+            </div>
+            <button class="btn-secondary" onclick="app.clearChat()">
+              <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+              <span>Clear Chat</span>
+            </button>
+          </div>
+
+          <div class="ai-coach-container">
+            <!-- Main Chat Panel -->
+            <div class="chat-panel-main">
+              <!-- Messages Viewport -->
+              <div id="chatMessages" class="chat-messages-scroll">
+                <!-- Initial Welcome Bubble -->
+                <div class="chat-bubble agent">
+                  <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+                    <div class="user-avatar-circle" style="background: var(--btn-primary-bg); color: var(--btn-primary-text);">AI</div>
+                    <strong>FYN Performance Coach</strong>
+                  </div>
+                  <div>
+                    Hello Aman! I have complete real-time access to your <strong>Three-Meal Diet Plan</strong>, <strong>1-Month Workout Routine (4 Days Lifting + 2 Days Cardio)</strong>, <strong>blood report markers</strong>, and daily telemetry.
+                    <br><br>
+                    You can ask me about:
+                    <ul>
+                      <li>Exact meal compositions & ACV timing rules</li>
+                      <li>Today's workout exercises, sets & reps</li>
+                      <li>Bedtime gut recovery supplements (Isabgol + Chia + Ashwagandha)</li>
+                      <li>Clinical analysis of your blood test biomarkers</li>
+                      <li>Adjustments if you feel hungry between meals</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Suggested Prompts Chips -->
+              <div class="chat-suggested-prompts">
+                <button type="button" class="suggested-prompt-chip" onclick="app.sendSuggestedPrompt('What is my exact protocol for Meal 1 today?')">
+                  Meal 1 Protocol
+                </button>
+                <button type="button" class="suggested-prompt-chip" onclick="app.sendSuggestedPrompt('What are my exercises for Day 1 Quadriceps?')">
+                  Day 1 Workout Split
+                </button>
+                <button type="button" class="suggested-prompt-chip" onclick="app.sendSuggestedPrompt('Analyze my blood report markers against my current diet')">
+                  Blood Reports Analysis
+                </button>
+                <button type="button" class="suggested-prompt-chip" onclick="app.sendSuggestedPrompt('What should I do if I feel excessive hunger between meals?')">
+                  Hunger Emergency Rule
+                </button>
+                <button type="button" class="suggested-prompt-chip" onclick="app.sendSuggestedPrompt('What is my bedtime supplement routine?')">
+                  Bedtime Routine
+                </button>
+              </div>
+
+              <!-- Input Bar -->
+              <form class="chat-input-bar" onsubmit="app.sendChatMessage(event)">
+                <input type="text" id="chatInput" placeholder="Ask your AI coach about your meals, workouts, or blood reports..." required autocomplete="off">
+                <button type="submit" class="btn-primary" style="width: auto; padding: 0.65rem 1.25rem;">
+                  <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+                  <span>Send</span>
+                </button>
+              </form>
+            </div>
+
+            <!-- Context Sidebar -->
+            <div class="chat-context-sidebar">
+              <div style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.45rem;">
+                <i data-lucide="database" style="width: 16px; height: 16px;"></i>
+                <span>Agent Live Knowledge Base</span>
+              </div>
+
+              <div class="context-mini-card">
+                <h4>Active Athlete</h4>
+                <div style="font-weight: 600;" id="aiSidebarName">Aman Yadav</div>
+                <div style="color: var(--text-muted); font-size: 0.75rem;">Height: 178 cm • Weight: 74.5 kg</div>
+              </div>
+
+              <div class="context-mini-card">
+                <h4>Diet Protocol Loaded</h4>
+                <div style="font-weight: 600;">Three-Meal Diet Plan</div>
+                <div style="color: var(--text-muted); font-size: 0.75rem;">ACV timing rule • Zero snacking • Bedtime Isabgol + Chia</div>
+              </div>
+
+              <div class="context-mini-card">
+                <h4>Training Plan Loaded</h4>
+                <div style="font-weight: 600;">1-Month Workout Routine</div>
+                <div style="color: var(--text-muted); font-size: 0.75rem;">4 Days Lifting + 2 Days Cardio • Reps: 15, 12, 10</div>
+              </div>
+
+              <div class="context-mini-card">
+                <h4>Clinical Vitals</h4>
+                <div style="font-weight: 600;">Blood Reports Synced</div>
+                <div style="color: var(--text-muted); font-size: 0.75rem;">Fasting glucose: 88 mg/dL • HbA1c: 5.2% • Rest HR: 50 bpm</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             VIEW 10: DEDICATED DAILY TARGETS CUSTOMIZATION
+             =================================================================== -->
+        <section id="view-targets" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>Customize Daily Targets & Quotas</h1>
+              <p>Configure individualized daily caloric, macronutrient, step, sleep, and hydration goals.</p>
+            </div>
+            <button class="btn-secondary" onclick="app.navigate('dashboard')">
+              <i data-lucide="arrow-left" style="width: 15px; height: 15px;"></i>
+              <span>Back to Dashboard</span>
+            </button>
+          </div>
+
+          <div style="max-width: 860px; margin: 0 auto;">
+            <div class="form-card">
+              <h2 style="font-size: 1.15rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="sliders" style="width: 18px; height: 18px;"></i>
+                <span>Caloric, Macro & Activity Goals</span>
+              </h2>
+              <p style="font-size: 0.82rem; margin-bottom: 1.5rem;">All metrics on your dashboard and AI audits calibrate against these target values.</p>
+
+              <form id="targetsDedicatedForm" onsubmit="app.saveTargetsDedicated(event)">
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Daily Calorie Target (kcal)</label>
+                    <input type="number" id="tarCalories" placeholder="2150" required>
+                    <div class="form-hint">Baseline maintenance or deficit energy target.</div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Daily Step Target</label>
+                    <input type="number" id="tarSteps" placeholder="10000" required>
+                    <div class="form-hint">Non-exercise activity thermogenesis quota.</div>
+                  </div>
+                </div>
+
+                <div class="form-grid-3">
+                  <div class="form-group">
+                    <label class="form-label">Protein Target (g)</label>
+                    <input type="number" id="tarProtein" placeholder="155" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Carbs Target (g)</label>
+                    <input type="number" id="tarCarbs" placeholder="175" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Fat Target (g)</label>
+                    <input type="number" id="tarFat" placeholder="75" required>
+                  </div>
+                </div>
+
+                <div class="form-grid-3">
+                  <div class="form-group">
+                    <label class="form-label">Active Burn Target (kcal)</label>
+                    <input type="number" id="tarBurn" placeholder="500" required>
+                    <div class="form-hint">Garmin workout active burn.</div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Sleep Target (Hours)</label>
+                    <input type="number" step="0.5" id="tarSleep" placeholder="8.0" required>
+                    <div class="form-hint">Garmin sleep duration goal.</div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Water Target (ml)</label>
+                    <input type="number" id="tarWater" placeholder="3500" required>
+                    <div class="form-hint">Hydration target.</div>
+                  </div>
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label">Goal Weight (kg)</label>
+                    <input type="number" step="0.1" id="tarWeight" placeholder="74.0" required>
+                    <div class="form-hint">HealthifyMe target weigh-in.</div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Google Gemini API Key (Optional)</label>
+                    <input type="password" id="tarGeminiKey" placeholder="AIzaSy... (Leave blank for Smart Engine)">
+                    <div class="form-hint">Enables live Gemini 1.5/2.5 Flash calls.</div>
+                  </div>
+                </div>
+
+                <button type="submit" class="btn-primary" style="margin-top: 1rem; padding: 0.85rem;">
+                  <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+                  <span>Save Targets & Recalibrate Dashboard</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+      </div> <!-- end authenticated content -->
+
+      <!-- FYN Brand Kit Footer -->
+      <footer class="fyn-site-footer">
+        <div class="fyn-footer-content">
+          <div class="fyn-footer-brand">
+            <div class="fyn-badge-icon" style="width: 38px; height: 38px;">
+              <span>FYN</span><span class="fyn-star-mini">✦</span>
+            </div>
+            <div class="fyn-lockup">
+              <div class="fyn-primary-title">
+                FYN<svg class="fyn-star-svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C12 7.5 9.5 10 2 12C9.5 14 12 16.5 12 24C12 16.5 14.5 14 22 12C14.5 10 12 7.5 12 0Z"/></svg>
+              </div>
+              <div class="fyn-sub-tag">FIND YOUR NORTH</div>
+            </div>
+          </div>
+
+          <div class="fyn-footer-triad">
+            <div class="fyn-triad-item">
+              <span class="fyn-triad-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg>
+              </span>
+              <span>TRAVEL</span>
+            </div>
+            <span class="fyn-triad-dot">•</span>
+            <div class="fyn-triad-item">
+              <span class="fyn-triad-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/></svg>
+              </span>
+              <span>LEARN</span>
+            </div>
+            <span class="fyn-triad-dot">•</span>
+            <div class="fyn-triad-item">
+              <span class="fyn-triad-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/><path d="M14 9h5v5"/></svg>
+              </span>
+              <span>IMPROVE</span>
+            </div>
+          </div>
+
+          <div class="fyn-footer-tagline">
+            TRAVEL. LEARN. IMPROVE.
+          </div>
+        </div>
+        <div class="fyn-footer-subline">
+          © FYN — Find Your North. Precision Performance & Bio-Telemetry OS. Black & White Monolith.
+        </div>
+      </footer>
+
+    </div>
+  </main>
+
+  <!-- ===================================================================
+       MODAL 1: QUICK UPDATE MODAL (HEADER DIRECT ACCESS)
+       =================================================================== -->
+  <div id="quickUpdateModal" class="modal-overlay" onclick="app.closeQuickModalIfOutside(event)">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">Quick Update Telemetry</h3>
+        <button class="modal-close-btn" onclick="app.closeQuickModal()"><i data-lucide="x" style="width: 18px; height: 18px;"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-tabs">
+          <button class="modal-tab-btn active" data-qtab="smart-photo" onclick="app.switchQuickTab('smart-photo')">
+            <i data-lucide="camera" style="width: 14px; height: 14px; margin-right: 4px; display: inline-block; vertical-align: middle;"></i>Auto Photo Scanner
+          </button>
+          <button class="modal-tab-btn" data-qtab="food" onclick="app.switchQuickTab('food')">Food</button>
+          <button class="modal-tab-btn" data-qtab="fitness" onclick="app.switchQuickTab('fitness')">Fitness</button>
+          <button class="modal-tab-btn" data-qtab="sleep" onclick="app.switchQuickTab('sleep')">Sleep</button>
+          <button class="modal-tab-btn" data-qtab="weight" onclick="app.switchQuickTab('weight')">Scale</button>
+        </div>
+
+        <!-- Universal Smart Photo Tab -->
+        <div id="qtab-smart-photo" class="qtab-content">
+          <div class="universal-dropzone" id="universalDropzone" onclick="document.getElementById('universalFileInput').click()" style="cursor: pointer; border: 2px dashed var(--border-medium); border-radius: 8px; transition: border-color 0.2s; background: var(--bg-card);">
+            <input type="file" id="universalFileInput" accept="image/*" style="display: none;" onchange="app.handleUniversalPhotoUpload(event)">
+            <div id="universalEmptyPrompt" style="text-align: center; padding: 1.5rem 1rem;">
+              <div style="width: 48px; height: 48px; border-radius: 50%; background: var(--bg-card-hover); display: flex; align-items: center; justify-content: center; margin: 0 auto 0.75rem;">
+                <i data-lucide="upload-cloud" style="width: 24px; height: 24px;"></i>
+              </div>
+              <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.25rem;">Upload or Drop Any Photo / Screenshot</h4>
+              <p style="font-size: 0.78rem; color: var(--text-muted); max-width: 400px; margin: 0 auto;">
+                Garmin Sleep, Garmin/Apple Workout, Meal Plate, or Scale display. AI automatically recognizes what it is, pulls out all the numbers, and syncs your dashboard in 1 click.
+              </p>
+            </div>
+            
+            <div id="universalScanningState" style="display: none; text-align: center; padding: 1.5rem 1rem;">
+              <div class="scanner-spinner" style="width: 32px; height: 32px; border: 3px solid var(--border-medium); border-top-color: var(--text-primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto;"></div>
+              <p style="font-size: 0.85rem; font-weight: 600; margin-top: 0.75rem;">Extracting with Native Vision OCR...</p>
+              <p style="font-size: 0.75rem; color: var(--text-muted);">Parsing metrics & architecture...</p>
+            </div>
+          </div>
+
+          <!-- Preview & Extracted Fields Card -->
+          <div id="universalResultCard" style="display: none; margin-top: 1rem; padding: 1rem; border: 1px solid var(--border-medium); border-radius: 8px; background: var(--bg-card);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+              <span id="universalCategoryBadge" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; padding: 0.25rem 0.6rem; background: var(--text-primary); color: var(--bg-primary); border-radius: 4px;">
+                CATEGORY DETECTED
+              </span>
+              <span id="universalConfidenceNote" style="font-size: 0.72rem; color: var(--text-muted);">Vision Verified</span>
+            </div>
+
+            <div id="universalFieldsContainer"></div>
+
+            <button type="button" class="btn-primary" id="universalDefaultSaveBtn" onclick="app.saveUniversalScan()" style="margin-top: 1rem; width: 100%;">
+              <i data-lucide="check-circle" style="width: 16px; height: 16px;"></i>
+              <span id="universalSaveBtnText">Confirm & Sync to Dashboard</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="qtab-food" class="qtab-content" style="display: none;">
+          <form onsubmit="app.submitQuickFood(event)">
+            <div class="form-group">
+              <label class="form-label">Meal Name</label>
+              <input type="text" id="qFoodName" placeholder="e.g. Meal 1: Whole eggs, sweet potato & whey" required>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Meal Type</label>
+                <select id="qFoodType">
+                  <option value="Breakfast">Breakfast</option>
+                  <option value="Lunch">Lunch</option>
+                  <option value="Dinner">Dinner</option>
+                  <option value="Snack" selected>Snack</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Calories (kcal)</label>
+                <input type="number" id="qFoodCalories" placeholder="680" required>
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Protein (g)</label>
+                <input type="number" id="qFoodProtein" placeholder="54">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Carbs (g)</label>
+                <input type="number" id="qFoodCarbs" placeholder="46">
+              </div>
+            </div>
+            <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">Log Food & Update Dashboard</button>
+          </form>
+        </div>
+
+        <div id="qtab-fitness" class="qtab-content" style="display: none;">
+          <form onsubmit="app.submitQuickFitness(event)">
+            <div class="form-group">
+              <label class="form-label">Workout Type</label>
+              <input type="text" id="qFitType" placeholder="e.g. Day 1: Quadriceps Hypertrophy" required>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Duration (min)</label>
+                <input type="number" id="qFitDuration" placeholder="50" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Burned (kcal)</label>
+                <input type="number" id="qFitBurn" placeholder="450" required>
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Avg Heart Rate</label>
+                <input type="number" id="qFitHr" placeholder="142">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Steps</label>
+                <input type="number" id="qFitSteps" placeholder="6500">
+              </div>
+            </div>
+            <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">Log Workout & Update Dashboard</button>
+          </form>
+        </div>
+
+        <div id="qtab-sleep" class="qtab-content" style="display: none;">
+          <form onsubmit="app.submitQuickSleep(event)">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Total Hours</label>
+                <input type="number" step="0.1" id="qSleepHours" placeholder="7.8" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sleep Score</label>
+                <input type="number" id="qSleepScore" placeholder="88" required>
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Deep Sleep (hrs)</label>
+                <input type="number" step="0.1" id="qSleepDeep" placeholder="1.9">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Resting HR (bpm)</label>
+                <input type="number" id="qSleepRestHr" placeholder="50">
+              </div>
+            </div>
+            <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">Log Sleep & Update Dashboard</button>
+          </form>
+        </div>
+
+        <div id="qtab-weight" class="qtab-content" style="display: none;">
+          <form onsubmit="app.submitQuickWeight(event)">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Weight (kg)</label>
+                <input type="number" step="0.05" id="qWeightVal" placeholder="74.5" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Body Fat %</label>
+                <input type="number" step="0.1" id="qWeightFat" placeholder="16.8">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes</label>
+              <input type="text" id="qWeightNotes" placeholder="HealthifyMe morning weigh-in">
+            </div>
+            <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">Log Weight & Update Dashboard</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===================================================================
+       MODAL 2: USER PROFILE, BIOMETRICS & BLOOD REPORTS
+       =================================================================== -->
+  <div id="profileModal" class="modal-overlay" onclick="app.closeProfileModalIfOutside(event)">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">Athlete Profile & Biometrics</h3>
+        <button class="modal-close-btn" onclick="app.closeProfileModal()"><i data-lucide="x" style="width: 18px; height: 18px;"></i></button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Profile Form -->
+        <form id="profileForm" onsubmit="app.saveProfile(event)">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input type="text" id="profName" placeholder="Aman Yadav" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mobile Number</label>
+              <input type="tel" id="profPhone" placeholder="+91 98765 43210">
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Email Address</label>
+              <input type="email" id="profEmail" placeholder="aman.yadav@fynhealth.com" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Change Password (Optional)</label>
+              <input type="password" id="profPassword" placeholder="Leave blank to keep unchanged">
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Height (cm)</label>
+              <input type="number" step="0.5" id="profHeight" placeholder="178.0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Current Weight (kg)</label>
+              <input type="number" step="0.1" id="profWeight" placeholder="74.5">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Clinical Blood Reports & Biomarkers</label>
+            <textarea id="profBloodReports" rows="4" placeholder="Fasting Glucose, HbA1c, Lipids (Cholesterol/Triglycerides/HDL/LDL), Vitamin D3, B12, Testosterone, Blood Pressure..."></textarea>
+            <div class="form-hint">This clinical data is directly accessible to your AI Health Coach for precision dietary recommendations.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Medical History & Allergies</label>
+            <textarea id="profMedicalHistory" rows="2" placeholder="List any medical history, digestive sensitivities, or food allergies."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Google Gemini API Key (Optional)</label>
+            <input type="password" id="profGeminiKey" placeholder="AIzaSy... (optional for cloud multimodal meal plate recognition)">
+            <div class="form-hint">Enables Google Gemini 1.5/2.0 multimodal food recognition alongside on-device Apple Vision OCR.</div>
+          </div>
+
+          <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+            <button type="submit" class="btn-primary" style="flex: 1;">
+              <i data-lucide="save" style="width: 16px; height: 16px;"></i>
+              <span>Save Profile & Update AI Context</span>
+            </button>
+            <button type="button" class="btn-secondary" onclick="app.logout()" style="color: #ff5555; border-color: #442222;">
+              <i data-lucide="log-out" style="width: 15px; height: 15px;"></i>
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- ADMIN ONLY SECTION: Client Directory & Switcher -->
+        <div id="adminClientSection" style="display: none; margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid var(--border-light);">
+          <div class="panel-header" style="margin-bottom: 0.85rem;">
+            <div class="panel-title" style="font-size: 0.95rem;">
+              <i data-lucide="shield" style="width: 16px; height: 16px;"></i>
+              <span>Admin: Multi-User Client Directory</span>
+            </div>
+            <button class="btn-primary" onclick="app.openAuthModal('register')" style="width: auto; padding: 0.35rem 0.75rem; font-size: 0.75rem;">
+              + Add Client
+            </button>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+            As an administrator, switch between clients to inspect their isolated telemetry partitions:
+          </p>
+          <div id="profileClientsRoster" class="client-roster-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===================================================================
+       MODAL 3: AUTH LOGIN / CREATE ACCOUNT
+       =================================================================== -->
+  <div id="authModal" class="modal-overlay" onclick="app.closeAuthModalIfOutside(event)">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title" id="authModalTitle">Client Account Access</h3>
+        <button class="modal-close-btn" onclick="app.closeAuthModal()"><i data-lucide="x" style="width: 18px; height: 18px;"></i></button>
+      </div>
+
+      <div class="modal-body">
+        <!-- FYN Brand Lockup -->
+        <div style="text-align: center; margin-bottom: 1.25rem;">
+          <div class="fyn-badge-icon" style="width: 44px; height: 44px; font-size: 0.95rem; margin: 0 auto 0.5rem;">
+            <span>FYN</span><span class="fyn-star-mini">✦</span>
+          </div>
+          <div class="fyn-primary-title" style="justify-content: center; font-size: 1.25rem;">
+            FYN<svg class="fyn-star-svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C12 7.5 9.5 10 2 12C9.5 14 12 16.5 12 24C12 16.5 14.5 14 22 12C14.5 10 12 7.5 12 0Z"/></svg>
+          </div>
+          <div class="fyn-sub-tag" style="letter-spacing: 0.3em; margin-top: 3px;">FIND YOUR NORTH</div>
+        </div>
+
+        <div class="auth-switch-tabs">
+          <button class="auth-tab-btn active" id="authTabLogin" onclick="app.switchAuthMode('login')">Sign In</button>
+          <button class="auth-tab-btn" id="authTabRegister" onclick="app.switchAuthMode('register')">Create Account</button>
+        </div>
+
+        <form id="loginForm" onsubmit="app.submitLogin(event)">
+          <div class="form-group">
+            <label class="form-label">Username or Email</label>
+            <input type="text" id="loginUsername" placeholder="e.g. aman" required autocomplete="username" value="aman">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" value="aman123">
+          </div>
+          <div class="form-hint" style="margin-bottom: 1rem;">
+            Aman Yadav Exclusive Profile: <code>aman</code> / password: <code>aman123</code>
+          </div>
+          <button type="submit" class="btn-primary">Sign In to FYN</button>
+        </form>
+
+        <form id="registerForm" onsubmit="app.submitRegister(event)" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" id="regName" placeholder="e.g. Rahul Sharma" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mobile Number</label>
+            <input type="tel" id="regPhone" placeholder="+91 98765 00000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" id="regUsername" placeholder="e.g. rahul" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" id="regEmail" placeholder="rahul@example.com" required autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="regPassword" placeholder="Create strong password" required autocomplete="new-password">
+          </div>
+          <button type="submit" class="btn-primary">Create Client Account</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===================================================================
+       HEVY FLOATING AUTO REST TIMER
+       =================================================================== -->
+  <div id="hevyFloatingTimer" class="hevy-floating-timer" style="display: none;">
+    <div style="display: flex; align-items: center; gap: 0.6rem;">
+      <i data-lucide="timer" style="width: 20px; height: 20px; color: #22c55e;"></i>
+      <div>
+        <div style="font-size: 0.65rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">Rest Timer</div>
+        <div class="hevy-timer-clock" id="hevyRestTimerClock">01:30</div>
+      </div>
+    </div>
+    <div class="hevy-timer-controls">
+      <button type="button" class="hevy-timer-btn" onclick="app.adjustRestTimer(-15)">-15s</button>
+      <button type="button" class="hevy-timer-btn" onclick="app.adjustRestTimer(15)">+15s</button>
+      <button type="button" class="hevy-timer-btn" onclick="app.togglePauseRestTimer()" id="hevyPauseBtn">Pause</button>
+      <button type="button" class="hevy-timer-btn" onclick="app.skipRestTimer()" style="background: var(--text-primary); color: var(--bg-primary);">Skip</button>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL: ADD EXERCISE TO ACTIVE HEVY WORKOUT
+       =================================================================== -->
+  <div id="addExerciseModal" class="modal-overlay" onclick="app.closeAddExerciseModalIfOutside(event)">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">Add Exercise to Workout</h3>
+        <button class="modal-close-btn" onclick="app.closeAddExerciseModal()"><i data-lucide="x" style="width: 18px; height: 18px;"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Search or Custom Exercise Name</label>
+          <input type="text" id="addExSearchInput" placeholder="e.g. Barbell Squats, Incline DB Press, Cable Flys..." oninput="app.filterExercisePresets(this.value)">
+        </div>
+
+        <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.5rem; letter-spacing: 0.5px;">
+          Preset Exercises with Animated Form
+        </div>
+        <div id="exercisePresetsList" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 320px; overflow-y: auto;">
+          <!-- Dynamically populated presets -->
+        </div>
+
+        <button type="button" class="btn-primary" onclick="app.addCustomExerciseFromModal()" style="margin-top: 1rem;">
+          + Add As Custom Exercise
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL: WORKOUT FINISHED CELEBRATION & AI COACH TELEMETRY AUDIT
+       =================================================================== -->
+  <div id="hevySummaryModal" class="modal-overlay" onclick="app.closeHevySummaryModalIfOutside(event)">
+    <div class="modal-dialog" style="max-width: 580px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: #22c55e; color: #000; font-weight: 900; font-size: 0.85rem;">✓</span>
+          <h3 class="modal-title">Workout Completed!</h3>
+        </div>
+        <button class="modal-close-btn" onclick="app.closeHevySummaryModal()"><i data-lucide="x" style="width: 18px; height: 18px;"></i></button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <div style="text-align: center;">
+          <h2 style="font-size: 1.6rem; font-weight: 900; margin-bottom: 0.2rem;" id="summaryWorkoutTitle">Upper Body Hypertrophy</h2>
+          <div style="font-size: 0.82rem; color: var(--text-muted);" id="summaryWorkoutSubtitle">Saved to FYN Health OS • Telemetry Transmitted to AI Coach</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem;">
+          <div class="panel-box" style="padding: 0.85rem 0.5rem; text-align: center;">
+            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase;">Volume</div>
+            <div style="font-size: 1.25rem; font-weight: 800; font-family: var(--font-mono); margin: 2px 0;" id="summaryVolume">0 kg</div>
+            <div style="font-size: 0.68rem; color: var(--text-secondary);">Tonnage</div>
+          </div>
+          <div class="panel-box" style="padding: 0.85rem 0.5rem; text-align: center;">
+            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase;">Duration</div>
+            <div style="font-size: 1.25rem; font-weight: 800; font-family: var(--font-mono); margin: 2px 0;" id="summaryDuration">00:00</div>
+            <div style="font-size: 0.68rem; color: var(--text-secondary);">Time</div>
+          </div>
+          <div class="panel-box" style="padding: 0.85rem 0.5rem; text-align: center;">
+            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase;">Sets Done</div>
+            <div style="font-size: 1.25rem; font-weight: 800; font-family: var(--font-mono); margin: 2px 0;" id="summarySets">0</div>
+            <div style="font-size: 0.68rem; color: var(--text-secondary);">Completed</div>
+          </div>
+          <div class="panel-box" style="padding: 0.85rem 0.5rem; text-align: center;">
+            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase;">Avg RPE</div>
+            <div style="font-size: 1.25rem; font-weight: 800; font-family: var(--font-mono); margin: 2px 0;" id="summaryRpe">8.0</div>
+            <div style="font-size: 0.68rem; color: var(--text-secondary);" id="summaryFeel">Optimal</div>
+          </div>
+        </div>
+
+        <div id="summaryGarminBox" class="info-slide-card" style="display: none; padding: 0.85rem 1rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+            <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-primary); text-transform: uppercase;">Garmin Biometric Cross-Check</span>
+            <span style="font-size: 0.7rem; color: #22c55e; font-weight: 700;">✓ Cross-Verified</span>
+          </div>
+          <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;" id="summaryGarminText">
+            Avg HR: 146 bpm • Peak HR: 178 bpm • Recovery: 24 hrs
+          </div>
+        </div>
+
+        <div class="panel-box" style="background: var(--glass-bg-elevated); border-left: 3px solid var(--text-primary); padding: 1rem;">
+          <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800; color: var(--text-primary); margin-bottom: 0.35rem;">
+            AI Performance Coach Initial Takeaway
+          </div>
+          <p style="font-size: 0.83rem; line-height: 1.5; color: var(--text-secondary); margin: 0;" id="summaryAiTakeaway">
+            Your progressive overload was well within the hyper-trophic stimulus window. Ensure post-workout protein (Meal 2 / whey) is consumed within 45 minutes for optimal amino acid uptake.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" class="btn-primary" onclick="app.closeHevySummaryModal()">
+            Done & View Dashboard
+          </button>
+          <button type="button" class="btn-secondary" onclick="app.navigate('ai-coach'); app.closeHevySummaryModal();">
+            Ask AI Coach About Session
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Toast Notification -->
+  <div id="toastNotice" class="toast-notice">
+    <i data-lucide="check-circle" style="width: 17px; height: 17px;"></i>
+    <span id="toastNoticeText">Telemetry updated successfully!</span>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
