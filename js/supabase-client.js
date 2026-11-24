@@ -24,8 +24,15 @@ let _supabaseClient = null;
 
 function getSupabaseClient() {
   if (!_supabaseClient && window.supabase) {
-    _supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
-    console.log('[FYN Supabase] Cloud backend initialized:', SUPABASE_CONFIG.url);
+    try {
+      // Use modern publishable key with legacy anon key fallback
+      const key = SUPABASE_CONFIG.publishableKey || SUPABASE_CONFIG.anonKey;
+      _supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, key);
+      console.log('[FYN Supabase] Cloud backend initialized with publishable key:', SUPABASE_CONFIG.url);
+    } catch (e) {
+      console.warn('[FYN Supabase] Initializing with anonKey fallback:', e);
+      _supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+    }
   }
   return _supabaseClient;
 }
