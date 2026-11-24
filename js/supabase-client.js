@@ -663,7 +663,8 @@ window.FYN_SUPABASE = {
         }
       }
 
-      const { error: pErr } = await sb.from('users').update(updatePayload).eq('id', activeUserId);
+      const profScope = (activeUserId === 3 || activeUserId === 5) ? [3, 5] : [activeUserId];
+      const { error: pErr } = await sb.from('users').update(updatePayload).in('id', profScope);
       if (pErr) throw pErr;
 
       // Automatically insert/sync weight into weight_logs so dashboard updates immediately
@@ -927,9 +928,12 @@ window.FYN_SUPABASE = {
     if (path.startsWith('/api/food/')) {
       const id = parseInt(path.replace('/api/food/', ''), 10);
       if (method === 'DELETE') {
-        await sb.from('food_logs').delete().eq('id', id);
-        await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
-        return { message: 'Food log deleted from Supabase' };
+        const { data: item } = await sb.from('food_logs').select('logged_date').eq('id', id).maybeSingle();
+        const logDate = item?.logged_date || new Date().toISOString().split('T')[0];
+        const { error: delErr } = await sb.from('food_logs').delete().eq('id', id);
+        if (delErr) console.error('[Supabase Delete food_logs Error]:', delErr);
+        await recalculateSupabaseAiAudit(sb, activeUserId, logDate);
+        return { message: 'Food log deleted from Supabase cloud!' };
       }
       if (method === 'PUT' || method === 'PATCH') {
         const updateData = {};
@@ -983,9 +987,12 @@ window.FYN_SUPABASE = {
     if (path.startsWith('/api/fitness/')) {
       const id = parseInt(path.replace('/api/fitness/', ''), 10);
       if (method === 'DELETE') {
-        await sb.from('fitness_logs').delete().eq('id', id);
-        await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
-        return { message: 'Fitness log deleted from Supabase' };
+        const { data: item } = await sb.from('fitness_logs').select('logged_date').eq('id', id).maybeSingle();
+        const logDate = item?.logged_date || new Date().toISOString().split('T')[0];
+        const { error: delErr } = await sb.from('fitness_logs').delete().eq('id', id);
+        if (delErr) console.error('[Supabase Delete fitness_logs Error]:', delErr);
+        await recalculateSupabaseAiAudit(sb, activeUserId, logDate);
+        return { message: 'Fitness log deleted from Supabase cloud!' };
       }
       if (method === 'PUT' || method === 'PATCH') {
         const updateData = {};
@@ -1044,9 +1051,12 @@ window.FYN_SUPABASE = {
     if (path.startsWith('/api/sleep/')) {
       const id = parseInt(path.replace('/api/sleep/', ''), 10);
       if (method === 'DELETE') {
-        await sb.from('sleep_logs').delete().eq('id', id);
-        await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
-        return { message: 'Sleep log deleted from Supabase' };
+        const { data: item } = await sb.from('sleep_logs').select('logged_date').eq('id', id).maybeSingle();
+        const logDate = item?.logged_date || new Date().toISOString().split('T')[0];
+        const { error: delErr } = await sb.from('sleep_logs').delete().eq('id', id);
+        if (delErr) console.error('[Supabase Delete sleep_logs Error]:', delErr);
+        await recalculateSupabaseAiAudit(sb, activeUserId, logDate);
+        return { message: 'Sleep log deleted from Supabase cloud!' };
       }
       if (method === 'PUT' || method === 'PATCH') {
         const updateData = {};
@@ -1112,9 +1122,12 @@ window.FYN_SUPABASE = {
     if (path.startsWith('/api/weight/')) {
       const id = parseInt(path.replace('/api/weight/', ''), 10);
       if (method === 'DELETE') {
-        await sb.from('weight_logs').delete().eq('id', id);
-        await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
-        return { message: 'Weight log deleted from Supabase' };
+        const { data: item } = await sb.from('weight_logs').select('logged_date').eq('id', id).maybeSingle();
+        const logDate = item?.logged_date || new Date().toISOString().split('T')[0];
+        const { error: delErr } = await sb.from('weight_logs').delete().eq('id', id);
+        if (delErr) console.error('[Supabase Delete weight_logs Error]:', delErr);
+        await recalculateSupabaseAiAudit(sb, activeUserId, logDate);
+        return { message: 'Weight log deleted from Supabase cloud!' };
       }
       if (method === 'PUT' || method === 'PATCH') {
         const updateData = {};
@@ -1161,9 +1174,12 @@ window.FYN_SUPABASE = {
     // 16b. Protocol Item Delete (/api/protocol/:id)
     if (path.startsWith('/api/protocol/') && method === 'DELETE') {
       const id = parseInt(path.replace('/api/protocol/', ''), 10);
-      await sb.from('daily_protocols').delete().eq('id', id);
-      await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
-      return { message: 'Protocol habit deleted from Supabase' };
+      const { data: item } = await sb.from('daily_protocols').select('protocol_date').eq('id', id).maybeSingle();
+      const protoDate = item?.protocol_date || new Date().toISOString().split('T')[0];
+      const { error: delErr } = await sb.from('daily_protocols').delete().eq('id', id);
+      if (delErr) console.error('[Supabase Delete protocol Error]:', delErr);
+      await recalculateSupabaseAiAudit(sb, activeUserId, protoDate);
+      return { message: 'Protocol habit deleted from Supabase cloud!' };
     }
 
     // 17. Toggle Protocol Checkoff (/api/protocol/toggle)
@@ -1214,13 +1230,9 @@ window.FYN_SUPABASE = {
     }
 
     // 19. Daily AI Audit (/api/audit or /api/ai-audit)
+    // Master Telemetry Brain: Always dynamically re-audit from live database state (zero stale cache, zero phantom marks)
     if (path === '/api/audit' || path === '/api/ai-audit') {
       const qDate = params.date || new Date().toISOString().split('T')[0];
-      const { data } = await sb.from('daily_ai_audits').select('*').in('user_id', userScope).eq('audit_date', qDate).order('id', { ascending: false }).limit(1);
-      if (data && data[0]) {
-        return { audit: data[0] };
-      }
-      // If not yet generated, dynamically compute and save right now
       const generated = await recalculateSupabaseAiAudit(sb, activeUserId, qDate);
       return { audit: generated };
     }
@@ -1383,6 +1395,44 @@ window.FYN_SUPABASE = {
 // Direct multimodal analysis via Google Gemini API + Tesseract.js OCR
 // ===================================================================
 
+// Downscale high-resolution mobile photos for ultra-fast OCR without memory bloat
+function downscaleImageForOCR(base64Str, maxWidth = 1000) {
+  return new Promise((resolve) => {
+    try {
+      if (!base64Str || typeof Image === 'undefined' || !base64Str.startsWith('data:image')) {
+        return resolve(base64Str);
+      }
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width <= maxWidth && height <= maxWidth) return resolve(base64Str);
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxWidth) {
+            width = Math.round((width * maxWidth) / height);
+            height = maxWidth;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => resolve(base64Str);
+      img.src = base64Str;
+    } catch (e) {
+      resolve(base64Str);
+    }
+  });
+}
+
 async function runClientVisionAnalysis(rawImage, category = 'auto', activeUser = null) {
   try {
     const geminiKey = (
@@ -1493,15 +1543,17 @@ Respond ONLY with a valid JSON object matching this schema:
     }
   }
 
-  // Step 2: Client-Side OCR with Tesseract.js (if loaded)
+  // Step 2: Downscale and Run Client-Side OCR with Tesseract.js
   let ocrText = '';
   if (typeof window !== 'undefined' && window.Tesseract && rawImage && rawImage.startsWith('data:image')) {
     try {
+      const scaledImg = await downscaleImageForOCR(rawImage, 1000);
       const tRes = await Promise.race([
-        window.Tesseract.recognize(rawImage, 'eng'),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Tesseract timeout')), 4500))
+        window.Tesseract.recognize(scaledImg, 'eng'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Tesseract timeout')), 12000))
       ]);
       ocrText = (tRes?.data?.text || '').toLowerCase();
+      console.log('[FYN OCR Result]:', ocrText);
     } catch (tErr) {
       console.warn('[Client OCR Notice]:', tErr.message);
     }
