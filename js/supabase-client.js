@@ -141,9 +141,9 @@ window.FYN_SUPABASE = {
       }
 
       // Check existing
-      const { data: existing } = await sb.from('users').select('id').or(`username.ilike.${username},email.ilike.${email}`);
+      const { data: existing } = await sb.from('users').select('id, username, email').or(`username.ilike.${username},email.ilike.${email}`);
       if (existing && existing.length > 0) {
-        throw new Error('Username or email is already registered.');
+        throw new Error(`The username or email is already registered! Please click the "Sign In" tab to log in.`);
       }
 
       const salt = generateRandomHex(16);
