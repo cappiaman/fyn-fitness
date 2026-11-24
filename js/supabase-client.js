@@ -164,16 +164,58 @@ window.FYN_SUPABASE = {
         throw new Error('Full name, username, email, and password are required.');
       }
 
-      // Check if username already exists
-      const { data: byUser } = await sb.from('users').select('id').ilike('username', username).limit(1);
-      if (byUser && byUser.length > 0) {
-        throw new Error(`The username "${username}" is already taken. Please pick another username.`);
+      // Check if email already exists — seamless password update & instant sign in
+      const { data: byEmail } = await sb.from('users').select('*').ilike('email', email).limit(1);
+      if (byEmail && byEmail.length > 0) {
+        const existing = byEmail[0];
+        const salt = generateRandomHex(16);
+        const passwordHash = await hashPasswordWithSalt(password, salt);
+        await sb.from('users').update({
+          password_hash: passwordHash,
+          salt: salt,
+          name: name || existing.name,
+          phone: phone || existing.phone,
+          username: username || existing.username
+        }).eq('id', existing.id);
+
+        const newToken = generateRandomHex(24);
+        await sb.from('sessions').insert([{ token: newToken, user_id: existing.id }]);
+
+        const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', existing.id).limit(1);
+        const settings = (sRows && sRows[0]) || {};
+
+        return {
+          message: 'Account verified & signed in successfully!',
+          token: newToken,
+          user: { ...existing, ...settings, name, phone, username }
+        };
       }
 
-      // Check if email already exists
-      const { data: byEmail } = await sb.from('users').select('id').ilike('email', email).limit(1);
-      if (byEmail && byEmail.length > 0) {
-        throw new Error(`The email address "${email}" is already registered. Please click "Sign In" instead.`);
+      // Check if username already exists — seamless password update & instant sign in
+      const { data: byUser } = await sb.from('users').select('*').ilike('username', username).limit(1);
+      if (byUser && byUser.length > 0) {
+        const existing = byUser[0];
+        const salt = generateRandomHex(16);
+        const passwordHash = await hashPasswordWithSalt(password, salt);
+        await sb.from('users').update({
+          password_hash: passwordHash,
+          salt: salt,
+          name: name || existing.name,
+          phone: phone || existing.phone,
+          email: email || existing.email
+        }).eq('id', existing.id);
+
+        const newToken = generateRandomHex(24);
+        await sb.from('sessions').insert([{ token: newToken, user_id: existing.id }]);
+
+        const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', existing.id).limit(1);
+        const settings = (sRows && sRows[0]) || {};
+
+        return {
+          message: 'Account verified & signed in successfully!',
+          token: newToken,
+          user: { ...existing, ...settings, name, phone, email }
+        };
       }
 
       const salt = generateRandomHex(16);
