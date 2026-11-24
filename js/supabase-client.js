@@ -754,12 +754,13 @@ window.FYN_SUPABASE = {
 // ===================================================================
 
 async function runClientVisionAnalysis(rawImage, category = 'auto', activeUser = null) {
-  const geminiKey = (
-    (typeof localStorage !== 'undefined' ? localStorage.getItem('fyn_gemini_key') : '') ||
-    activeUser?.gemini_api_key ||
-    (typeof document !== 'undefined' && document.getElementById('profGeminiKey') ? document.getElementById('profGeminiKey').value : '') ||
-    ''
-  ).trim();
+  try {
+    const geminiKey = (
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('fyn_gemini_key') : '') ||
+      activeUser?.gemini_api_key ||
+      (typeof document !== 'undefined' && document.getElementById('profGeminiKey') ? document.getElementById('profGeminiKey').value : '') ||
+      ''
+    ).trim();
 
   // Step 1: If Google Gemini API Key is provided, call Gemini 1.5/2.0 Flash Vision directly!
   if (geminiKey && rawImage) {
@@ -878,6 +879,10 @@ Respond ONLY with a valid JSON object matching this schema:
 
   // Step 3: Pattern & Telemetry Extraction Engine
   return extractTelemetryFromTextAndContext(ocrText, category);
+  } catch (err) {
+    console.error('[Vision Analysis Safe Fallback]:', err);
+    return extractTelemetryFromTextAndContext('', category);
+  }
 }
 
 function extractTelemetryFromTextAndContext(ocrText = '', requestedCategory = 'auto') {

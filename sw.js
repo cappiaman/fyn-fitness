@@ -1,5 +1,5 @@
-// FYN OS Service Worker
-const CACHE_NAME = 'fyn-app-cache-v3';
+// FYN OS Service Worker - Network-First Dynamic Telemetry
+const CACHE_NAME = 'fyn-app-cache-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -32,23 +32,21 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Pass through API calls directly to backend server
+  // Pass through all API calls directly
   if (event.request.url.includes('/api/')) {
     return;
   }
   
+  // Network-First: Always fetch latest version from server, fallback to cache if offline
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cached and refresh in background
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-      return fetch(event.request);
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return networkResponse;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
