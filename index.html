@@ -35,7 +35,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   
   <!-- Monochrome Stylesheet -->
-  <link rel="stylesheet" href="css/styles.css?v=4.1.0-unified-cloud-sync">
+  <link rel="stylesheet" href="css/styles.css?v=4.2.0-secure-auth-unified">
 </head>
 <body>
 
@@ -173,8 +173,8 @@
   <main class="main-wrapper">
     <div class="container">
 
-      <!-- Unauthenticated State Lock Screen -->
-      <div id="unauthenticatedLockScreen" class="unauth-card" style="display: none;">
+      <!-- Unauthenticated State Lock Screen (Default: Protected & Locked until login) -->
+      <div id="unauthenticatedLockScreen" class="unauth-card" style="display: block;">
         <div class="fyn-badge-icon" style="width: 54px; height: 54px; font-size: 1.15rem; margin: 0 auto 0.75rem;">
           <span>FYN</span><span class="fyn-star-mini">✦</span>
         </div>
@@ -195,8 +195,8 @@
         </div>
       </div>
 
-      <!-- Authenticated Content Container -->
-      <div id="authenticatedAppContent">
+      <!-- Authenticated Content Container (Hidden until authenticated) -->
+      <div id="authenticatedAppContent" style="display: none;">
 
         <!-- ===================================================================
              VIEW 1: DASHBOARD (CENTRAL COMMAND)
@@ -2454,7 +2454,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Client-Side OCR Engine for Garmin/Apple Health Telemetry -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/supabase-client.js?v=4.1.0-unified-cloud-sync"></script>
-  <script src="js/app.js?v=4.1.0-unified-cloud-sync"></script>
+  <script src="js/supabase-client.js?v=4.2.0-secure-auth-unified"></script>
+  <script src="js/app.js?v=4.2.0-secure-auth-unified"></script>
 </body>
 </html>

@@ -138,6 +138,9 @@ class FYNApp {
       try {
         return await window.FYN_SUPABASE.handleApiRequest(url, options, this.token);
       } catch (sbErr) {
+        if (sbErr.message && sbErr.message.includes('Authentication required') && !url.includes('/api/auth/')) {
+          this.renderUnauthenticatedState();
+        }
         console.error('[Supabase Cloud API Error]:', sbErr);
         throw sbErr;
       }
@@ -1553,6 +1556,10 @@ class FYNApp {
   // PROFILE MODAL & ADMIN CLIENT DIRECTORY
   // -------------------------------------------------------------
   openProfileModal() {
+    if (!this.currentUser) {
+      this.openAuthModal('login');
+      return;
+    }
     const modal = document.getElementById('profileModal');
     if (!modal) return;
     modal.classList.add('open');
@@ -2177,6 +2184,10 @@ class FYNApp {
   // HEADER QUICK UPDATE MODAL
   // -------------------------------------------------------------
   openQuickUpdateModal() {
+    if (!this.currentUser) {
+      this.openAuthModal('login');
+      return;
+    }
     const modal = document.getElementById('quickUpdateModal');
     if (modal) modal.classList.add('open');
   }

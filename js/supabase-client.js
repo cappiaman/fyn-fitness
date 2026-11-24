@@ -60,15 +60,15 @@ function generateRandomHex(len = 16) {
 async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
   try {
     const qDate = dateStr || new Date().toISOString().split('T')[0];
-    const uids = (userId === 3 || userId === 5) ? [3, 5] : [userId];
+    const targetUid = (userId === 3 || userId === 5) ? 5 : (userId || 5);
 
     const [foodRes, fitRes, sleepRes, userRes, setRes, protoRes] = await Promise.all([
-      sb.from('food_logs').select('*').in('user_id', uids).eq('logged_date', qDate).order('created_at', { ascending: true }),
-      sb.from('fitness_logs').select('*').in('user_id', uids).eq('logged_date', qDate).order('created_at', { ascending: true }),
-      sb.from('sleep_logs').select('*').in('user_id', uids).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1),
-      sb.from('users').select('*').in('id', uids).limit(1),
-      sb.from('user_settings').select('*').in('user_id', uids).limit(1),
-      sb.from('daily_protocols').select('*').in('user_id', uids).eq('protocol_date', qDate)
+      sb.from('food_logs').select('*').eq('user_id', targetUid).eq('logged_date', qDate).order('created_at', { ascending: true }),
+      sb.from('fitness_logs').select('*').eq('user_id', targetUid).eq('logged_date', qDate).order('created_at', { ascending: true }),
+      sb.from('sleep_logs').select('*').eq('user_id', targetUid).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1),
+      sb.from('users').select('*').eq('id', targetUid).limit(1),
+      sb.from('user_settings').select('*').eq('user_id', targetUid).limit(1),
+      sb.from('daily_protocols').select('*').eq('user_id', targetUid).eq('protocol_date', qDate)
     ]);
 
     const foods = foodRes.data || [];
@@ -184,17 +184,13 @@ async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
       improvements: improvementsList.join('. ')
     };
 
-    let firstSaved = null;
-    for (const uid of uids) {
-      const { data: auditData, error: aErr } = await sb.from('daily_ai_audits').upsert({
-        user_id: uid,
-        ...auditPayload
-      }, { onConflict: 'user_id,audit_date' }).select();
-      if (aErr) console.warn('[FYN AI Audit Upsert Warning for User ' + uid + ']:', aErr);
-      if (!firstSaved && auditData && auditData[0]) firstSaved = auditData[0];
-    }
+    const { data: auditData, error: aErr } = await sb.from('daily_ai_audits').upsert({
+      user_id: targetUid,
+      ...auditPayload
+    }, { onConflict: 'user_id,audit_date' }).select();
+    if (aErr) console.warn('[FYN AI Audit Upsert Warning]:', aErr);
 
-    return firstSaved || { user_id: userId, ...auditPayload };
+    return (auditData && auditData[0]) || { user_id: targetUid, ...auditPayload };
   } catch (err) {
     console.error('[FYN AI Audit Recalculate Error]:', err);
     return null;
@@ -368,9 +364,9 @@ window.FYN_SUPABASE = {
     const method = (options.method || 'GET').toUpperCase();
     const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
 
-    // Get current authenticated user from token
+    // Get current authenticated user from session token
     let activeUser = null;
-    let activeUserId = 5; // Canonical Aman Yadav user ID
+    let activeUserId = null;
     if (token) {
       const { data: sessionRows } = await sb.from('sessions').select('user_id').eq('token', token).limit(1);
       if (sessionRows && sessionRows.length > 0 && sessionRows[0].user_id) {
@@ -383,12 +379,19 @@ window.FYN_SUPABASE = {
         }
       }
     }
-    if (!activeUser) {
-      const { data: uList } = await sb.from('users').select('*').eq('id', 5).limit(1);
-      if (uList && uList.length > 0) {
-        activeUser = uList[0];
-        activeUserId = 5;
-      }
+
+    // Public routes that do not require an active session token
+    const isPublic = (
+      path === '/api/inquiries' ||
+      path === '/api/auth/login' ||
+      path === '/api/auth/register' ||
+      path === '/api/auth/me' ||
+      path === '/api/auth/logout'
+    );
+
+    // Strict privacy & security guard: block unauthorized access to private health OS
+    if (!isPublic && (!activeUser || !activeUserId)) {
+      throw new Error('Authentication required. Please sign in to view your telemetry.');
     }
 
     // 1. Inquiries Form Submission
@@ -589,16 +592,10 @@ window.FYN_SUPABASE = {
 
     // 4. Authentication: Validate Current User (/api/auth/me)
     if (path === '/api/auth/me') {
-      if (!activeUser) {
-        const { data: uList } = await sb.from('users').select('*').eq('id', 5).limit(1);
-        if (uList && uList.length > 0) {
-          activeUser = uList[0];
-          activeUserId = 5;
-        } else {
-          return { user: null };
-        }
+      if (!activeUser || !activeUserId) {
+        return { user: null };
       }
-      const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', 5).limit(1);
+      const { data: sRows } = await sb.from('user_settings').select('*').eq('user_id', activeUserId).limit(1);
       const settings = (sRows && sRows[0]) || {};
       return { user: { ...activeUser, ...settings } };
     }
@@ -731,8 +728,9 @@ window.FYN_SUPABASE = {
       }
     }
 
-    // Scope user biometrics: User 3 and User 5 represent Aman Yadav, seamlessly synced
-    const userScope = (activeUserId === 3 || activeUserId === 5) ? [3, 5] : [activeUserId];
+    // Canonical user resolution: User 5 is the primary Aman Yadav account across all devices
+    const targetUid = (activeUserId === 3 || activeUserId === 5) ? 5 : activeUserId;
+    const userScope = [targetUid];
 
     // 10. FYN MASTER DASHBOARD ENGINE (/api/dashboard)
     if (path === '/api/dashboard') {
