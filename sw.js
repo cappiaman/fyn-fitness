@@ -1,5 +1,5 @@
-// FYN OS Service Worker - Network-First Dynamic Telemetry
-const CACHE_NAME = 'fyn-app-cache-v6';
+// FYN OS Service Worker - Network-First Dynamic Telemetry (Big Brain Sync)
+const CACHE_NAME = 'fyn-app-cache-v12-bigbrain-sync';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -12,6 +12,12 @@ const ASSETS_TO_CACHE = [
   './icons/icon-512.png',
   './icons/icon.svg'
 ];
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

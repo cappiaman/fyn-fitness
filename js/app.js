@@ -1351,9 +1351,9 @@ class FYNApp {
 
           <div style="padding: 1rem; background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: var(--radius-md);">
             <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">3. Sleep Architecture</div>
-            <div style="font-size: 1.15rem; font-weight: 700; margin-top: 0.25rem;">${s ? (s.total_hours + ' hrs (Score ' + s.sleep_score + ')') : 'Not logged'}</div>
+            <div style="font-size: 1.15rem; font-weight: 700; margin-top: 0.25rem;">${s && s.total_hours ? (this.formatSleepDuration(s.total_hours) + ' (Score ' + (s.sleep_score || 0) + ')') : 'Not logged'}</div>
             <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem;">
-              ${s ? `Deep: ${s.deep_hours}h • REM: ${s.rem_hours}h • Rest HR: ${s.resting_hr} bpm` : 'Sync Garmin Sleep screenshot'}
+              ${s && s.total_hours ? `Deep: ${this.formatSleepDuration(s.deep_hours)} • REM: ${this.formatSleepDuration(s.rem_hours)} • Light: ${this.formatSleepDuration(s.light_hours || 0)} • Rest HR: ${s.resting_hr || 52} bpm` : 'Sync Garmin Sleep screenshot'}
             </div>
           </div>
 
@@ -3179,17 +3179,28 @@ class FYNApp {
 
   async submitQuickSleep(e) {
     e.preventDefault();
+    const qH = parseInt(document.getElementById('qSleepHoursH')?.value || 0, 10);
+    const qM = parseInt(document.getElementById('qSleepHoursM')?.value || 0, 10);
+    const totalHours = (qH || qM) ? +(qH + qM / 60).toFixed(2) : parseFloat(document.getElementById('qSleepHours')?.value || 8.8);
+
+    const qDeepH = parseInt(document.getElementById('qSleepDeepH')?.value || 0, 10);
+    const qDeepM = parseInt(document.getElementById('qSleepDeepM')?.value || 0, 10);
+    const deepHours = (qDeepH || qDeepM) ? +(qDeepH + qDeepM / 60).toFixed(2) : parseFloat(document.getElementById('qSleepDeep')?.value || 1.37);
+
     const payload = {
-      total_hours: parseFloat(document.getElementById('qSleepHours').value || 0),
-      sleep_score: parseInt(document.getElementById('qSleepScore').value || 0),
-      deep_hours: parseFloat(document.getElementById('qSleepDeep').value || 0),
-      resting_hr: parseInt(document.getElementById('qSleepRestHr').value || 0),
+      total_hours: totalHours,
+      sleep_score: parseInt(document.getElementById('qSleepScore')?.value || 88, 10),
+      deep_hours: deepHours,
+      rem_hours: +(totalHours * 0.25).toFixed(2),
+      light_hours: +(totalHours * 0.55).toFixed(2),
+      resting_hr: parseInt(document.getElementById('qSleepRestHr')?.value || 52, 10),
+      notes: `Quick Sleep Log: ${this.formatSleepDuration(totalHours)}`,
       logged_date: this.selectedDate
     };
     try {
       await this.apiFetch('/api/sleep', { method: 'POST', body: payload });
       this.closeQuickModal();
-      this.showToast('Sleep logged and dashboard updated!');
+      this.showToast(`Sleep logged (${this.formatSleepDuration(totalHours)}) and dashboard updated!`);
       this.loadDashboard();
       this.loadAiAudit();
     } catch (err) {

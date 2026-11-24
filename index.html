@@ -30,7 +30,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   
   <!-- Monochrome Stylesheet -->
-  <link rel="stylesheet" href="css/styles.css?v=2.8.0">
+  <link rel="stylesheet" href="css/styles.css?v=3.1.0-bigbrain">
 </head>
 <body>
 
@@ -2023,22 +2023,32 @@
           <form onsubmit="app.submitQuickSleep(event)">
             <div class="form-grid-2">
               <div class="form-group">
-                <label class="form-label">Total Hours</label>
-                <input type="number" step="0.1" id="qSleepHours" placeholder="7.8" required>
+                <label class="form-label">Total Duration (Hours & Mins)</label>
+                <div style="display: flex; gap: 0.4rem; align-items: center;">
+                  <input type="number" id="qSleepHoursH" placeholder="8" min="0" max="24" style="flex: 1;" required>
+                  <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+                  <input type="number" id="qSleepHoursM" placeholder="48" min="0" max="59" style="flex: 1;" required>
+                  <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+                </div>
               </div>
               <div class="form-group">
-                <label class="form-label">Sleep Score</label>
+                <label class="form-label">Sleep Score (0-100)</label>
                 <input type="number" id="qSleepScore" placeholder="88" required>
               </div>
             </div>
             <div class="form-grid-2">
               <div class="form-group">
-                <label class="form-label">Deep Sleep (hrs)</label>
-                <input type="number" step="0.1" id="qSleepDeep" placeholder="1.9">
+                <label class="form-label">Deep Sleep (Hours & Mins)</label>
+                <div style="display: flex; gap: 0.4rem; align-items: center;">
+                  <input type="number" id="qSleepDeepH" placeholder="1" min="0" max="24" style="flex: 1;">
+                  <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+                  <input type="number" id="qSleepDeepM" placeholder="22" min="0" max="59" style="flex: 1;">
+                  <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+                </div>
               </div>
               <div class="form-group">
                 <label class="form-label">Resting HR (bpm)</label>
-                <input type="number" id="qSleepRestHr" placeholder="50">
+                <input type="number" id="qSleepRestHr" placeholder="52">
               </div>
             </div>
             <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">Log Sleep & Update Dashboard</button>
@@ -2433,7 +2443,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Client-Side OCR Engine for Garmin/Apple Health Telemetry -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/supabase-client.js?v=2.8.0"></script>
-  <script src="js/app.js?v=2.8.0"></script>
+  <script src="js/supabase-client.js?v=3.1.0-bigbrain"></script>
+  <script src="js/app.js?v=3.1.0-bigbrain"></script>
 </body>
 </html>

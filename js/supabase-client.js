@@ -52,19 +52,23 @@ function generateRandomHex(len = 16) {
 }
 
 // ===================================================================
-// DYNAMIC REAL-TIME AI AUDIT ENGINE
-// Calculates physiological score and updates public.daily_ai_audits
+// ===================================================================
+// DYNAMIC REAL-TIME AI AUDIT ENGINE (THE MASTER BRAIN)
+// Unified Biometrics & Telemetry Scoring Engine
+// Calculates honest physiological score and syncs public.daily_ai_audits
 // ===================================================================
 async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
   try {
     const qDate = dateStr || new Date().toISOString().split('T')[0];
+    const uids = (userId === 3 || userId === 5) ? [3, 5] : [userId];
+
     const [foodRes, fitRes, sleepRes, userRes, setRes, protoRes] = await Promise.all([
-      sb.from('food_logs').select('*').eq('user_id', userId).eq('logged_date', qDate),
-      sb.from('fitness_logs').select('*').eq('user_id', userId).eq('logged_date', qDate),
-      sb.from('sleep_logs').select('*').eq('user_id', userId).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1),
-      sb.from('users').select('*').eq('id', userId).limit(1),
-      sb.from('user_settings').select('*').eq('user_id', userId).limit(1),
-      sb.from('daily_protocols').select('*').eq('user_id', userId).eq('protocol_date', qDate)
+      sb.from('food_logs').select('*').in('user_id', uids).eq('logged_date', qDate).order('created_at', { ascending: true }),
+      sb.from('fitness_logs').select('*').in('user_id', uids).eq('logged_date', qDate).order('created_at', { ascending: true }),
+      sb.from('sleep_logs').select('*').in('user_id', uids).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1),
+      sb.from('users').select('*').in('id', uids).limit(1),
+      sb.from('user_settings').select('*').in('user_id', uids).limit(1),
+      sb.from('daily_protocols').select('*').in('user_id', uids).eq('protocol_date', qDate)
     ]);
 
     const foods = foodRes.data || [];
@@ -86,55 +90,89 @@ async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
     const habitsDone = protocols.filter(p => p.completed).length;
     const habitsTotal = protocols.length;
 
-    // 1. Food Score
-    let foodScore = 88;
-    if (foods.length > 0) {
+    // 1. Food Score — Honest Zero Marks if no meals logged
+    let foodScore = 0;
+    if (foods.length > 0 && totalCal > 0) {
       const calRatio = totalCal / targetCal;
       const proteinRatio = totalProtein / targetProtein;
-      let cScore = 100 - Math.min(40, Math.abs(1 - calRatio) * 50);
+      let cScore = 100 - Math.min(50, Math.abs(1 - calRatio) * 60);
       let pScore = Math.min(100, proteinRatio * 100);
-      foodScore = Math.max(50, Math.round(cScore * 0.5 + pScore * 0.5));
+      foodScore = Math.max(10, Math.round(cScore * 0.5 + pScore * 0.5));
     }
 
-    // 2. Exercise Score
-    let exerciseScore = 80;
-    if (fits.length > 0 || totalSteps > 0) {
+    // 2. Exercise Score — Honest Zero Marks if no workout/steps logged
+    let exerciseScore = 0;
+    if (fits.length > 0 || totalSteps > 0 || totalBurn > 0) {
       const stepScore = Math.min(100, Math.round((totalSteps / targetSteps) * 100));
       const burnScore = Math.min(100, Math.round((totalBurn / targetBurn) * 100));
-      exerciseScore = Math.max(50, Math.round(stepScore * 0.5 + burnScore * 0.5));
+      exerciseScore = Math.max(10, Math.round(stepScore * 0.5 + burnScore * 0.5));
     }
 
-    // 3. Sleep Score
-    let sleepScore = 85;
-    if (sleep) {
-      sleepScore = sleep.sleep_score || Math.min(100, Math.round(((sleep.total_hours || 7) / 8.0) * 100));
+    // 3. Sleep Score — Honest Zero Marks if no sleep logged
+    let sleepScore = 0;
+    if (sleep && parseFloat(sleep.total_hours || 0) > 0) {
+      sleepScore = sleep.sleep_score || Math.min(100, Math.round(((parseFloat(sleep.total_hours)) / 8.0) * 100));
     }
 
-    // 4. Recovery Score
-    let recoveryScore = Math.round((sleepScore * 0.6) + ((100 - Math.min(100, Math.max(0, (totalBurn - 600) / 10))) * 0.4));
-    if (recoveryScore < 40) recoveryScore = 40;
-    if (recoveryScore > 98) recoveryScore = 98;
+    // 4. Recovery Score — Based on verified habits and sleep recovery
+    let recoveryScore = 0;
+    const habitsPct = (habitsTotal > 0) ? Math.round((habitsDone / habitsTotal) * 100) : 0;
+    if (sleepScore > 0 || habitsDone > 0) {
+      const sleepWeight = sleepScore > 0 ? sleepScore * 0.6 : 0;
+      const habitWeight = habitsPct * 0.4;
+      recoveryScore = Math.round(sleepWeight + habitWeight);
+    }
 
-    // Overall Score
+    // Overall Score — Real weighted mathematical calculation (Zero phantom marks)
     const overallScore = Math.round(foodScore * 0.35 + exerciseScore * 0.30 + sleepScore * 0.20 + recoveryScore * 0.15);
 
-    const summaryText = `[FYN Master Telemetry Audit]: Overall Day Score is ${overallScore}/100. Logged: ${foods.length} meals (${totalCal}/${targetCal} kcal, ${Math.round(totalProtein)}g protein) · ${fits.length} workout sessions (${totalBurn} kcal, ${totalSteps.toLocaleString()} steps) · Habits executed: ${habitsDone}/${habitsTotal || 9}. Body weight: ${user.weight_kg || 124} kg.`;
+    // Summary Text
+    const foodSummary = (foods.length > 0 && totalCal > 0)
+      ? `${foods.length} meals (${totalCal}/${targetCal} kcal, ${Math.round(totalProtein)}g protein)`
+      : `0 meals logged (0/${targetCal} kcal) — Nutrition tracking pending`;
+    const fitSummary = (fits.length > 0 || totalSteps > 0 || totalBurn > 0)
+      ? `${fits.length} workout sessions (${totalBurn} kcal, ${totalSteps.toLocaleString()} steps)`
+      : `0 workouts logged (0 steps)`;
+    const summaryText = `[FYN Master Telemetry Audit]: Overall Day Score is ${overallScore}/100. Logged: ${foodSummary} · ${fitSummary} · Habits executed: ${habitsDone}/${habitsTotal || 0}. Body weight: ${user.weight_kg || 124} kg.`;
 
     const strengthsList = [];
-    if (foods.length > 0) strengthsList.push(`${foods.length} planned meals tracked (${totalCal} kcal, ${Math.round(totalProtein)}g protein)`);
-    if (fits.length > 0) strengthsList.push(`Active training session (${totalBurn} kcal burned, ${totalSteps.toLocaleString()} steps)`);
-    if (sleep) strengthsList.push(`Restorative sleep telemetry logged (${sleep.total_hours}h, score ${sleepScore})`);
-    if (habitsDone > 0) strengthsList.push(`${habitsDone}/${habitsTotal} daily protocol habits executed`);
-    if (strengthsList.length === 0) strengthsList.push('Initial baseline biometrics active in Supabase cloud');
+    if (foods.length > 0 && totalCal > 0) {
+      strengthsList.push(`${foods.length} planned meals tracked (${totalCal} kcal, ${Math.round(totalProtein)}g protein)`);
+    }
+    if (fits.length > 0 || totalBurn > 0) {
+      strengthsList.push(`Active training session (${totalBurn} kcal burned, ${totalSteps.toLocaleString()} steps)`);
+    }
+    if (sleep && parseFloat(sleep.total_hours || 0) > 0) {
+      const totM = Math.round(parseFloat(sleep.total_hours) * 60);
+      const sh = Math.floor(totM / 60);
+      const sm = totM % 60;
+      const sleepFmt = sh > 0 ? `${sh}h ${sm}m` : `${sm}m`;
+      strengthsList.push(`Restorative sleep telemetry logged (${sleepFmt}, score ${sleepScore})`);
+    }
+    if (habitsDone > 0) {
+      strengthsList.push(`${habitsDone}/${habitsTotal} daily protocol habits executed`);
+    }
+    if (strengthsList.length === 0) {
+      strengthsList.push('Awaiting initial telemetry entries for today. Start by logging your morning meal, workout, or Garmin sleep.');
+    }
 
     const improvementsList = [];
-    if (totalSteps < targetSteps) improvementsList.push(`Step deficit: ${(targetSteps - totalSteps).toLocaleString()} steps remaining to hit your ${targetSteps.toLocaleString()} target`);
-    if (totalProtein < targetProtein) improvementsList.push(`Protein deficit: ${Math.round(targetProtein - totalProtein)}g protein needed to meet daily goal`);
-    if (habitsDone < habitsTotal) improvementsList.push(`${habitsTotal - habitsDone} protocol habits remaining for today`);
-    if (improvementsList.length === 0) improvementsList.push('Optimal physiological profile maintained. Proceed with evening gut motility protocol.');
+    if (foods.length === 0 || totalCal === 0) {
+      improvementsList.push(`No meals logged yet today. Track your meals to hit your ${targetCal.toLocaleString()} kcal and ${targetProtein}g protein target`);
+    } else if (totalProtein < targetProtein) {
+      improvementsList.push(`Protein deficit: ${Math.round(targetProtein - totalProtein)}g protein needed to meet daily goal`);
+    }
+    if (totalSteps < targetSteps) {
+      improvementsList.push(`Step deficit: ${(targetSteps - totalSteps).toLocaleString()} steps remaining to hit your ${targetSteps.toLocaleString()} target`);
+    }
+    if (habitsDone < habitsTotal) {
+      improvementsList.push(`${habitsTotal - habitsDone} protocol habits remaining for today`);
+    }
+    if (improvementsList.length === 0) {
+      improvementsList.push('Optimal physiological profile maintained. Proceed with evening gut motility protocol.');
+    }
 
     const auditPayload = {
-      user_id: userId,
       audit_date: qDate,
       overall_score: overallScore,
       food_score: foodScore,
@@ -146,9 +184,17 @@ async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
       improvements: improvementsList.join('. ')
     };
 
-    const { data: auditData, error: aErr } = await sb.from('daily_ai_audits').upsert(auditPayload, { onConflict: 'user_id,audit_date' }).select();
-    if (aErr) console.warn('[FYN AI Audit Upsert Warning]:', aErr);
-    return auditData?.[0] || auditPayload;
+    let firstSaved = null;
+    for (const uid of uids) {
+      const { data: auditData, error: aErr } = await sb.from('daily_ai_audits').upsert({
+        user_id: uid,
+        ...auditPayload
+      }, { onConflict: 'user_id,audit_date' }).select();
+      if (aErr) console.warn('[FYN AI Audit Upsert Warning for User ' + uid + ']:', aErr);
+      if (!firstSaved && auditData && auditData[0]) firstSaved = auditData[0];
+    }
+
+    return firstSaved || { user_id: userId, ...auditPayload };
   } catch (err) {
     console.error('[FYN AI Audit Recalculate Error]:', err);
     return null;
@@ -671,18 +717,21 @@ window.FYN_SUPABASE = {
       }
     }
 
+    // Scope user biometrics: User 3 and User 5 represent Aman Yadav, seamlessly synced
+    const userScope = (activeUserId === 3 || activeUserId === 5) ? [3, 5] : [activeUserId];
+
     // 10. FYN MASTER DASHBOARD ENGINE (/api/dashboard)
     if (path === '/api/dashboard') {
       const qDate = params.date || new Date().toISOString().split('T')[0];
 
       const [foodRes, fitRes, sleepRes, weightRes, protoRes, setRes, userRes] = await Promise.all([
-        sb.from('food_logs').select('*').eq('user_id', activeUserId).eq('logged_date', qDate).order('created_at', { ascending: true }),
-        sb.from('fitness_logs').select('*').eq('user_id', activeUserId).eq('logged_date', qDate).order('created_at', { ascending: true }),
-        sb.from('sleep_logs').select('*').eq('user_id', activeUserId).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1),
-        sb.from('weight_logs').select('*').eq('user_id', activeUserId).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1),
-        sb.from('daily_protocols').select('*').eq('user_id', activeUserId).eq('protocol_date', qDate).order('id', { ascending: true }),
-        sb.from('user_settings').select('*').eq('user_id', activeUserId).limit(1),
-        sb.from('users').select('*').eq('id', activeUserId).limit(1)
+        sb.from('food_logs').select('*').in('user_id', userScope).eq('logged_date', qDate).order('created_at', { ascending: true }),
+        sb.from('fitness_logs').select('*').in('user_id', userScope).eq('logged_date', qDate).order('created_at', { ascending: true }),
+        sb.from('sleep_logs').select('*').in('user_id', userScope).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1),
+        sb.from('weight_logs').select('*').in('user_id', userScope).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1),
+        sb.from('daily_protocols').select('*').in('user_id', userScope).eq('protocol_date', qDate).order('id', { ascending: true }),
+        sb.from('user_settings').select('*').in('user_id', userScope).limit(1),
+        sb.from('users').select('*').in('id', userScope).limit(1)
       ]);
 
       const foodItems = foodRes.data || [];
@@ -836,7 +885,7 @@ window.FYN_SUPABASE = {
     if (path === '/api/food') {
       const qDate = params.date || new Date().toISOString().split('T')[0];
       if (method === 'GET') {
-        const { data, error } = await sb.from('food_logs').select('*').eq('user_id', activeUserId).eq('logged_date', qDate).order('created_at', { ascending: true });
+        const { data, error } = await sb.from('food_logs').select('*').in('user_id', userScope).eq('logged_date', qDate).order('created_at', { ascending: true });
         if (error) throw error;
         return { items: data || [] };
       }
@@ -859,26 +908,44 @@ window.FYN_SUPABASE = {
         const { data, error } = await sb.from('food_logs').insert([payload]).select();
         if (error) throw error;
 
-        // Auto-update real-time daily AI audit in Supabase
+        // Auto-update real-time daily AI audit across active biometrics
         await recalculateSupabaseAiAudit(sb, activeUserId, logDate);
 
         return { message: 'Food item saved to Supabase!', item: data[0] };
       }
     }
 
-    // 12. Delete Food Log (/api/food/:id)
-    if (path.startsWith('/api/food/') && method === 'DELETE') {
+    // 12. Food Log Edit / Delete (/api/food/:id)
+    if (path.startsWith('/api/food/')) {
       const id = parseInt(path.replace('/api/food/', ''), 10);
-      await sb.from('food_logs').delete().eq('id', id).eq('user_id', activeUserId);
-      await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
-      return { message: 'Food log deleted from Supabase' };
+      if (method === 'DELETE') {
+        await sb.from('food_logs').delete().eq('id', id);
+        await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
+        return { message: 'Food log deleted from Supabase' };
+      }
+      if (method === 'PUT' || method === 'PATCH') {
+        const updateData = {};
+        if (body.dish_name !== undefined) updateData.dish_name = body.dish_name;
+        if (body.meal_type !== undefined) updateData.meal_type = body.meal_type;
+        if (body.calories !== undefined) updateData.calories = parseInt(body.calories, 10);
+        if (body.protein !== undefined) updateData.protein = parseFloat(body.protein);
+        if (body.carbs !== undefined) updateData.carbs = parseFloat(body.carbs);
+        if (body.fat !== undefined) updateData.fat = parseFloat(body.fat);
+        if (body.fiber !== undefined) updateData.fiber = parseFloat(body.fiber);
+        if (body.notes !== undefined) updateData.notes = body.notes;
+        const { data, error } = await sb.from('food_logs').update(updateData).eq('id', id).select();
+        if (error) throw error;
+        const logDate = data?.[0]?.logged_date || new Date().toISOString().split('T')[0];
+        await recalculateSupabaseAiAudit(sb, activeUserId, logDate);
+        return { message: 'Food log updated in Supabase', item: data?.[0] };
+      }
     }
 
     // 13. Fitness Activity Logs (/api/fitness)
     if (path === '/api/fitness') {
       const qDate = params.date || new Date().toISOString().split('T')[0];
       if (method === 'GET') {
-        const { data } = await sb.from('fitness_logs').select('*').eq('user_id', activeUserId).eq('logged_date', qDate);
+        const { data } = await sb.from('fitness_logs').select('*').in('user_id', userScope).eq('logged_date', qDate).order('created_at', { ascending: true });
         return { items: data || [] };
       }
       if (method === 'POST') {
@@ -904,15 +971,45 @@ window.FYN_SUPABASE = {
       }
     }
 
+    // 13b. Fitness Log Edit / Delete (/api/fitness/:id)
+    if (path.startsWith('/api/fitness/')) {
+      const id = parseInt(path.replace('/api/fitness/', ''), 10);
+      if (method === 'DELETE') {
+        await sb.from('fitness_logs').delete().eq('id', id);
+        await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
+        return { message: 'Fitness log deleted from Supabase' };
+      }
+      if (method === 'PUT' || method === 'PATCH') {
+        const updateData = {};
+        if (body.activity_type !== undefined) updateData.activity_type = body.activity_type;
+        if (body.duration_min !== undefined) updateData.duration_min = parseInt(body.duration_min, 10);
+        if (body.calories_burned !== undefined) updateData.calories_burned = parseInt(body.calories_burned, 10);
+        if (body.avg_hr !== undefined) updateData.avg_hr = parseInt(body.avg_hr, 10);
+        if (body.distance_km !== undefined) updateData.distance_km = parseFloat(body.distance_km);
+        if (body.steps !== undefined) updateData.steps = parseInt(body.steps, 10);
+        if (body.notes !== undefined) updateData.notes = body.notes;
+        const { data, error } = await sb.from('fitness_logs').update(updateData).eq('id', id).select();
+        if (error) throw error;
+        const logDate = data?.[0]?.logged_date || new Date().toISOString().split('T')[0];
+        await recalculateSupabaseAiAudit(sb, activeUserId, logDate);
+        return { message: 'Fitness log updated in Supabase', item: data?.[0] };
+      }
+    }
+
     // 14. Sleep Logs (/api/sleep)
     if (path === '/api/sleep') {
-      const qDate = params.date || new Date().toISOString().split('T')[0];
+      const qDate = params.date || null;
       if (method === 'GET') {
-        const { data } = await sb.from('sleep_logs').select('*').eq('user_id', activeUserId).eq('logged_date', qDate).limit(1);
-        return { sleep: data?.[0] || null };
+        if (qDate) {
+          const { data } = await sb.from('sleep_logs').select('*').in('user_id', userScope).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1);
+          return { sleep: data?.[0] || null, items: data || [] };
+        } else {
+          const { data } = await sb.from('sleep_logs').select('*').in('user_id', userScope).order('logged_date', { ascending: false }).limit(20);
+          return { items: data || [], sleep: data?.[0] || null };
+        }
       }
       if (method === 'POST') {
-        const logDate = body.logged_date || qDate;
+        const logDate = body.logged_date || new Date().toISOString().split('T')[0];
         const payload = {
           user_id: activeUserId,
           total_hours: parseFloat(body.total_hours || 8.0),
@@ -935,15 +1032,46 @@ window.FYN_SUPABASE = {
       }
     }
 
+    // 14b. Sleep Log Edit / Delete (/api/sleep/:id)
+    if (path.startsWith('/api/sleep/')) {
+      const id = parseInt(path.replace('/api/sleep/', ''), 10);
+      if (method === 'DELETE') {
+        await sb.from('sleep_logs').delete().eq('id', id);
+        await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
+        return { message: 'Sleep log deleted from Supabase' };
+      }
+      if (method === 'PUT' || method === 'PATCH') {
+        const updateData = {};
+        if (body.total_hours !== undefined) updateData.total_hours = parseFloat(body.total_hours);
+        if (body.sleep_score !== undefined) updateData.sleep_score = parseInt(body.sleep_score, 10);
+        if (body.deep_hours !== undefined) updateData.deep_hours = parseFloat(body.deep_hours);
+        if (body.rem_hours !== undefined) updateData.rem_hours = parseFloat(body.rem_hours);
+        if (body.light_hours !== undefined) updateData.light_hours = parseFloat(body.light_hours);
+        if (body.awake_min !== undefined) updateData.awake_min = parseInt(body.awake_min, 10);
+        if (body.resting_hr !== undefined) updateData.resting_hr = parseInt(body.resting_hr, 10);
+        if (body.notes !== undefined) updateData.notes = body.notes;
+        const { data, error } = await sb.from('sleep_logs').update(updateData).eq('id', id).select();
+        if (error) throw error;
+        const logDate = data?.[0]?.logged_date || new Date().toISOString().split('T')[0];
+        await recalculateSupabaseAiAudit(sb, activeUserId, logDate);
+        return { message: 'Sleep log updated in Supabase', sleep: data?.[0] };
+      }
+    }
+
     // 15. Weight Logs (/api/weight)
     if (path === '/api/weight') {
-      const qDate = params.date || new Date().toISOString().split('T')[0];
+      const qDate = params.date || null;
       if (method === 'GET') {
-        const { data } = await sb.from('weight_logs').select('*').eq('user_id', activeUserId).eq('logged_date', qDate).limit(1);
-        return { weight: data?.[0] || null };
+        if (qDate) {
+          const { data } = await sb.from('weight_logs').select('*').in('user_id', userScope).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1);
+          return { weight: data?.[0] || null, items: data || [] };
+        } else {
+          const { data } = await sb.from('weight_logs').select('*').in('user_id', userScope).order('logged_date', { ascending: false }).limit(20);
+          return { items: data || [], weight: data?.[0] || null };
+        }
       }
       if (method === 'POST') {
-        const logDate = body.logged_date || qDate;
+        const logDate = body.logged_date || new Date().toISOString().split('T')[0];
         const wVal = parseFloat(body.weight_kg || activeUser?.weight_kg || 124.0);
         const hVal = parseFloat(activeUser?.height_cm || 187.0);
         const calculatedBmi = (wVal > 0 && hVal > 0) ? +(wVal / Math.pow(hVal / 100, 2)).toFixed(1) : 35.5;
@@ -961,8 +1089,8 @@ window.FYN_SUPABASE = {
         const { data, error } = await sb.from('weight_logs').insert([payload]).select();
         if (error) throw error;
 
-        // Sync weight to users table
-        await sb.from('users').update({ weight_kg: wVal }).eq('id', activeUserId);
+        // Sync weight to users table across Aman Yadav accounts
+        await sb.from('users').update({ weight_kg: wVal }).in('id', userScope);
         if (activeUser) activeUser.weight_kg = wVal;
 
         // Auto-update real-time daily AI audit in Supabase
@@ -972,11 +1100,38 @@ window.FYN_SUPABASE = {
       }
     }
 
+    // 15b. Weight Log Edit / Delete (/api/weight/:id)
+    if (path.startsWith('/api/weight/')) {
+      const id = parseInt(path.replace('/api/weight/', ''), 10);
+      if (method === 'DELETE') {
+        await sb.from('weight_logs').delete().eq('id', id);
+        await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
+        return { message: 'Weight log deleted from Supabase' };
+      }
+      if (method === 'PUT' || method === 'PATCH') {
+        const updateData = {};
+        if (body.weight_kg !== undefined) {
+          updateData.weight_kg = parseFloat(body.weight_kg);
+          await sb.from('users').update({ weight_kg: updateData.weight_kg }).in('id', userScope);
+          if (activeUser) activeUser.weight_kg = updateData.weight_kg;
+        }
+        if (body.body_fat_pct !== undefined) updateData.body_fat_pct = parseFloat(body.body_fat_pct);
+        if (body.muscle_mass_kg !== undefined) updateData.muscle_mass_kg = parseFloat(body.muscle_mass_kg);
+        if (body.bmi !== undefined) updateData.bmi = parseFloat(body.bmi);
+        if (body.notes !== undefined) updateData.notes = body.notes;
+        const { data, error } = await sb.from('weight_logs').update(updateData).eq('id', id).select();
+        if (error) throw error;
+        const logDate = data?.[0]?.logged_date || new Date().toISOString().split('T')[0];
+        await recalculateSupabaseAiAudit(sb, activeUserId, logDate);
+        return { message: 'Weight log updated in Supabase', weight: data?.[0] };
+      }
+    }
+
     // 16. Daily Protocols & Habit Checkoffs (/api/daily-protocols or /api/protocol)
     if (path === '/api/daily-protocols' || path === '/api/protocol') {
       const qDate = params.date || new Date().toISOString().split('T')[0];
       if (method === 'GET') {
-        const { data, error } = await sb.from('daily_protocols').select('*').eq('user_id', activeUserId).eq('protocol_date', qDate).order('id', { ascending: true });
+        const { data, error } = await sb.from('daily_protocols').select('*').in('user_id', userScope).eq('protocol_date', qDate).order('id', { ascending: true });
         if (error) throw error;
         return { items: data || [] };
       }
@@ -995,15 +1150,37 @@ window.FYN_SUPABASE = {
       }
     }
 
+    // 16b. Protocol Item Delete (/api/protocol/:id)
+    if (path.startsWith('/api/protocol/') && method === 'DELETE') {
+      const id = parseInt(path.replace('/api/protocol/', ''), 10);
+      await sb.from('daily_protocols').delete().eq('id', id);
+      await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
+      return { message: 'Protocol habit deleted from Supabase' };
+    }
+
     // 17. Toggle Protocol Checkoff (/api/protocol/toggle)
     if (path === '/api/protocol/toggle' && method === 'POST') {
       const protoId = parseInt(body.id, 10);
       const isCompleted = !!body.completed;
-      const { error } = await sb.from('daily_protocols').update({ completed: isCompleted }).eq('id', protoId).eq('user_id', activeUserId);
+      const { error } = await sb.from('daily_protocols').update({ completed: isCompleted }).eq('id', protoId);
       if (error) throw error;
 
       await recalculateSupabaseAiAudit(sb, activeUserId, new Date().toISOString().split('T')[0]);
       return { success: true, completed: isCompleted };
+    }
+
+    // 17b. Meal Template Delete (/api/template/:id)
+    if (path.startsWith('/api/template/') && method === 'DELETE') {
+      const id = parseInt(path.replace('/api/template/', ''), 10);
+      await sb.from('meal_templates').delete().eq('id', id);
+      return { message: 'Meal template deleted from Supabase' };
+    }
+
+    // 17c. Workout Plan Delete (/api/workout_plan/:id)
+    if (path.startsWith('/api/workout_plan/') && method === 'DELETE') {
+      const id = parseInt(path.replace('/api/workout_plan/', ''), 10);
+      await sb.from('workout_plans').delete().eq('id', id);
+      return { message: 'Workout plan deleted from Supabase' };
     }
 
     // 18. Daily Journal (/api/daily-journal or /api/journal)
@@ -1031,7 +1208,7 @@ window.FYN_SUPABASE = {
     // 19. Daily AI Audit (/api/audit or /api/ai-audit)
     if (path === '/api/audit' || path === '/api/ai-audit') {
       const qDate = params.date || new Date().toISOString().split('T')[0];
-      const { data } = await sb.from('daily_ai_audits').select('*').eq('user_id', activeUserId).eq('audit_date', qDate).limit(1);
+      const { data } = await sb.from('daily_ai_audits').select('*').in('user_id', userScope).eq('audit_date', qDate).order('id', { ascending: false }).limit(1);
       if (data && data[0]) {
         return { audit: data[0] };
       }
