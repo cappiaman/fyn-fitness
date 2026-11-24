@@ -1,9 +1,10 @@
 // FYN OS Service Worker
-const CACHE_NAME = 'fyn-app-cache-v2';
+const CACHE_NAME = 'fyn-app-cache-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './css/styles.css',
+  './js/supabase-client.js',
   './js/app.js',
   './manifest.json',
   './icons/apple-touch-icon.png',

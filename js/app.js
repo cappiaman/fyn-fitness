@@ -234,7 +234,7 @@ class FYNApp {
     if (pBlood) pBlood.value = user.blood_reports || '';
     if (pMed) pMed.value = user.medical_history || '';
     const pGemini = document.getElementById('profGeminiKey');
-    if (pGemini) pGemini.value = user.gemini_api_key || '';
+    if (pGemini) pGemini.value = user.gemini_api_key || localStorage.getItem('fyn_gemini_key') || '';
   }
 
   // -------------------------------------------------------------
@@ -1578,6 +1578,9 @@ class FYNApp {
 
     try {
       const res = await this.apiFetch('/api/profile', { method: 'POST', body: payload });
+      if (payload.gemini_api_key) {
+        localStorage.setItem('fyn_gemini_key', payload.gemini_api_key);
+      }
       this.showToast(res.message || 'Profile and clinical reports updated!');
       await this.checkAuth();
       this.closeProfileModal();
@@ -4231,22 +4234,24 @@ class FYNApp {
 
     this.showToast("Scanning Garmin Connect screenshot with OCR...");
 
-    const formData = new FormData();
-    formData.append('image', file);
-
     try {
-      const uploadRes = await fetch('/api/upload', {
-        method: 'POST',
-        headers: this.token ? { 'Authorization': `Bearer ${this.token}` } : {},
-        body: formData
+      const b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
       });
-      const uploadData = await uploadRes.json();
-      if (!uploadData.url) throw new Error("Upload failed");
+
+      const uploadData = await this.apiFetch('/api/upload', {
+        method: 'POST',
+        body: { image: b64 }
+      });
+      if (!uploadData || !uploadData.url) throw new Error("Upload failed");
 
       // Now call Garmin Cross-Check API
       const crosscheckRes = await this.apiFetch('/api/workout/crosscheck-garmin', {
         method: 'POST',
-        body: { image_url: uploadData.url }
+        body: { image_url: uploadData.url, image_base64: b64, image: b64 }
       });
 
       if (!this.activeWorkout) {
