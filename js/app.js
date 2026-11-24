@@ -205,11 +205,17 @@ class FYNApp {
     const lockScreen = document.getElementById('unauthenticatedLockScreen');
     const nameEl = document.getElementById('headerUserName');
     const avatarEl = document.getElementById('headerUserAvatar');
+    const headerAdminBtn = document.getElementById('headerAdminClientsBtn');
+    const navAdminBtn = document.getElementById('navAdminBtn');
 
+    if (headerAdminBtn) headerAdminBtn.style.display = 'none';
+    if (navAdminBtn) navAdminBtn.style.display = 'none';
     if (authContent) authContent.style.display = 'none';
     if (lockScreen) lockScreen.style.display = 'block';
     if (nameEl) nameEl.textContent = 'Sign In';
     if (avatarEl) avatarEl.textContent = '?';
+
+    this.closeAdminClientsModal();
   }
 
   setCurrentUser(user) {
@@ -221,6 +227,13 @@ class FYNApp {
     if (nameEl && user) nameEl.textContent = user.name || user.username;
     if (avatarEl && user) avatarEl.textContent = (user.name || user.username).charAt(0).toUpperCase();
     if (aiSidebarName && user) aiSidebarName.textContent = user.name || user.username;
+
+    // Strict Admin Visibility Guard: Show Client Intelligence window only to admin
+    const isAdmin = !!(user && user.role === 'admin');
+    const headerAdminBtn = document.getElementById('headerAdminClientsBtn');
+    const navAdminBtn = document.getElementById('navAdminBtn');
+    if (headerAdminBtn) headerAdminBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+    if (navAdminBtn) navAdminBtn.style.display = isAdmin ? 'inline-flex' : 'none';
 
     // Fill profile modal & targets form
     this.populateProfileForm(user);
@@ -1660,18 +1673,433 @@ class FYNApp {
     try {
       const res = await this.apiFetch('/api/auth/switch-client', {
         method: 'POST',
-        body: { user_id: userId }
+        body: { user_id: userId, client_id: userId }
       });
       if (res && res.token) {
         this.token = res.token;
         localStorage.setItem('fyn_session_token', res.token);
         this.setCurrentUser(res.user);
-        this.showToast(`Switched active client to ${res.user.name}`);
+        this.showToast(`Switched active client to ${res.user.name || res.user.username}`);
         this.closeProfileModal();
-        this.loadDashboard();
+        this.closeAdminClientsModal();
+        await this.loadDashboard();
+        await this.loadAiAudit();
       }
     } catch (err) {
       alert('Error switching client: ' + err.message);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // DEDICATED ADMIN CLIENT INTELLIGENCE & EXCEL EXPORT
+  // -------------------------------------------------------------
+  openAdminClientsModal() {
+    if (!this.currentUser || this.currentUser.role !== 'admin') {
+      alert('Access Restricted: Client Intelligence Portal is only accessible to administrator accounts.');
+      return;
+    }
+    const modal = document.getElementById('adminClientsModal');
+    if (!modal) return;
+    modal.classList.add('open');
+    this.loadAdminClientsDirectory();
+  }
+
+  closeAdminClientsModal() {
+    const modal = document.getElementById('adminClientsModal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  closeAdminClientsModalIfOutside(e) {
+    if (e.target.id === 'adminClientsModal') {
+      this.closeAdminClientsModal();
+    }
+  }
+
+  async loadAdminClientsDirectory() {
+    const listContainer = document.getElementById('adminClientsList');
+    const countBadge = document.getElementById('adminClientsTotalCount');
+    if (listContainer) {
+      listContainer.innerHTML = `
+        <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+          <div class="hevy-spinner" style="margin: 0 auto 0.75rem; width: 24px; height: 24px; border-width: 2px;"></div>
+          <span>Loading client directory & telemetry stats from Supabase Cloud...</span>
+        </div>
+      `;
+    }
+
+    try {
+      const data = await this.apiFetch('/api/auth/clients');
+      this.cachedAdminClients = data.clients || [];
+      this.adminActiveUserId = data.active_user_id || (this.currentUser ? this.currentUser.id : null);
+
+      if (countBadge) {
+        countBadge.textContent = `${this.cachedAdminClients.length} Registered Clients`;
+      }
+
+      this.renderAdminClientsList(this.cachedAdminClients);
+    } catch (err) {
+      console.error('Failed to load admin client directory:', err);
+      if (listContainer) {
+        listContainer.innerHTML = `
+          <div style="text-align: center; padding: 2rem; color: #ff5555; background: rgba(255, 85, 85, 0.08); border-radius: 8px;">
+            <p style="font-weight: 700; margin-bottom: 0.5rem;">Could not load client directory</p>
+            <p style="font-size: 0.85rem;">${err.message}</p>
+          </div>
+        `;
+      }
+    }
+  }
+
+  filterAdminClients() {
+    const query = (document.getElementById('adminClientSearchInput')?.value || '').trim().toLowerCase();
+    if (!this.cachedAdminClients) return;
+
+    if (!query) {
+      this.renderAdminClientsList(this.cachedAdminClients);
+      return;
+    }
+
+    const filtered = this.cachedAdminClients.filter(c => {
+      const name = (c.name || '').toLowerCase();
+      const username = (c.username || '').toLowerCase();
+      const email = (c.email || '').toLowerCase();
+      const phone = (c.phone || '').toLowerCase();
+      return name.includes(query) || username.includes(query) || email.includes(query) || phone.includes(query);
+    });
+
+    this.renderAdminClientsList(filtered);
+  }
+
+  renderAdminClientsList(clients) {
+    const listContainer = document.getElementById('adminClientsList');
+    if (!listContainer) return;
+
+    if (!clients || clients.length === 0) {
+      listContainer.innerHTML = `
+        <div style="text-align: center; padding: 3rem 1.5rem; color: var(--text-muted); background: var(--bg-surface); border-radius: 8px; border: 1px dashed var(--border-medium);">
+          <i data-lucide="users" style="width: 32px; height: 32px; margin: 0 auto 0.5rem; opacity: 0.5;"></i>
+          <p style="font-weight: 600; margin: 0;">No clients match your filter criteria.</p>
+        </div>
+      `;
+      this.refreshIcons();
+      return;
+    }
+
+    const activeId = this.adminActiveUserId || (this.currentUser ? this.currentUser.id : null);
+
+    listContainer.innerHTML = clients.map(client => {
+      const isActive = client.id === activeId;
+      const initial = (client.name || client.username || 'U').charAt(0).toUpperCase();
+      const joinedDate = client.created_at ? new Date(client.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Verified';
+      const stats = client.stats || { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0 };
+      
+      const hCm = parseFloat(client.height_cm || 0);
+      const wKg = parseFloat(client.weight_kg || 0);
+      let bmiVal = '—';
+      if (hCm > 0 && wKg > 0) {
+        const hm = hCm / 100;
+        bmiVal = (wKg / (hm * hm)).toFixed(1);
+      }
+
+      const escapedUsername = (client.username || '').replace(/'/g, "\\'");
+
+      return `
+        <div class="admin-client-card ${isActive ? 'active-admin-client' : ''}" id="adminClientCard_${client.id}">
+          <div class="admin-client-header">
+            <div style="display: flex; align-items: center; gap: 0.85rem;">
+              <div class="admin-client-avatar">${initial}</div>
+              <div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                  <span style="font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em;">${client.name || client.username}</span>
+                  <span class="badge ${client.role === 'admin' ? 'badge-admin' : 'badge-client'}">${(client.role || 'client').toUpperCase()}</span>
+                  ${isActive ? '<span class="badge badge-active">ACTIVE SESSION</span>' : ''}
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                  @${client.username} • Client ID #${client.id} • Registered ${joinedDate}
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn-primary btn-download-excel" onclick="app.exportClientDataToExcel(${client.id}, '${escapedUsername}')" id="btnExport_${client.id}" style="width: auto; padding: 0.45rem 0.85rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.4rem;" title="Download all telemetry in Excel (.xlsx) format">
+                <i data-lucide="file-spreadsheet" style="width: 15px; height: 15px;"></i>
+                <span>Download Excel</span>
+              </button>
+              ${!isActive ? `
+                <button class="btn-secondary" onclick="app.switchClient(${client.id})" style="width: auto; padding: 0.45rem 0.85rem; font-size: 0.8rem;">
+                  <span>Switch Profile</span>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- Contact & Biometric Vitals Grid -->
+          <div class="admin-client-metrics-grid">
+            <div class="admin-metric-cell">
+              <div class="admin-metric-label">EMAIL</div>
+              <div class="admin-metric-val" title="${client.email || '—'}">${client.email || '—'}</div>
+            </div>
+            <div class="admin-metric-cell">
+              <div class="admin-metric-label">PHONE</div>
+              <div class="admin-metric-val">${client.phone || '—'}</div>
+            </div>
+            <div class="admin-metric-cell">
+              <div class="admin-metric-label">HEIGHT / WEIGHT</div>
+              <div class="admin-metric-val">${hCm > 0 ? hCm + ' cm' : '—'} / ${wKg > 0 ? wKg + ' kg' : '—'}</div>
+            </div>
+            <div class="admin-metric-cell">
+              <div class="admin-metric-label">CALCULATED BMI</div>
+              <div class="admin-metric-val">${bmiVal}</div>
+            </div>
+          </div>
+
+          <!-- Telemetry Summary Badges -->
+          <div class="admin-client-telemetry-strip">
+            <span class="telemetry-pill"><i data-lucide="utensils" style="width: 13px; height: 13px;"></i> ${stats.food} Meals Logged</span>
+            <span class="telemetry-pill"><i data-lucide="activity" style="width: 13px; height: 13px;"></i> ${stats.fitness} Workouts</span>
+            <span class="telemetry-pill"><i data-lucide="moon" style="width: 13px; height: 13px;"></i> ${stats.sleep} Sleep Logs</span>
+            <span class="telemetry-pill"><i data-lucide="scale" style="width: 13px; height: 13px;"></i> ${stats.weight} Weigh-ins</span>
+            <span class="telemetry-pill"><i data-lucide="check-square" style="width: 13px; height: 13px;"></i> ${stats.habits} Habit Protocols</span>
+          </div>
+
+          ${(client.medical_history || client.blood_reports) ? `
+            <details class="admin-client-medical-details" style="font-size: 0.82rem; background: var(--bg-elevated); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border-light);">
+              <summary style="cursor: pointer; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 0.4rem;">
+                <i data-lucide="activity-square" style="width: 14px; height: 14px;"></i>
+                <span>Clinical Biomarkers & Medical Profile (Click to expand)</span>
+              </summary>
+              <div style="margin-top: 0.65rem; line-height: 1.55; color: var(--text-muted); white-space: pre-line; border-top: 1px solid var(--border-light); padding-top: 0.5rem;">
+                ${client.blood_reports ? `<div style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary);">Blood Biomarkers:</strong>\n${client.blood_reports}</div>` : ''}
+                ${client.medical_history ? `<div><strong style="color: var(--text-primary);">Medical History:</strong>\n${client.medical_history}</div>` : ''}
+              </div>
+            </details>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+
+    this.refreshIcons();
+  }
+
+  async exportClientDataToExcel(clientId, username) {
+    const btn = document.getElementById(`btnExport_${clientId}`);
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span class="hevy-spinner" style="width: 13px; height: 13px; border-width: 2px; margin-right: 4px;"></span> Exporting...`;
+    }
+
+    try {
+      const res = await this.apiFetch(`/api/admin/client-full-data?client_id=${clientId}`);
+      if (!res || !res.client) {
+        throw new Error('Client telemetry data not found.');
+      }
+
+      const client = res.client;
+      const settings = res.settings || {};
+      const foodLogs = res.food_logs || [];
+      const fitnessLogs = res.fitness_logs || [];
+      const sleepLogs = res.sleep_logs || [];
+      const weightLogs = res.weight_logs || [];
+      const protocols = res.daily_protocols || [];
+      const journals = res.daily_journals || [];
+      const audits = res.daily_ai_audits || [];
+      const sessions = res.workout_sessions || [];
+
+      const sanitizedUsername = (client.username || username || `user_${clientId}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const todayStr = new Date().toISOString().split('T')[0];
+      const filename = `FYN_Client_${sanitizedUsername}_Full_Telemetry_${todayStr}.xlsx`;
+
+      // Check if SheetJS XLSX library is available
+      if (window.XLSX && typeof window.XLSX.utils?.book_new === 'function') {
+        const wb = window.XLSX.utils.book_new();
+
+        // 1. Client Profile & Target Settings Sheet
+        const profileSheetData = [
+          { "Field": "Client ID", "Value": client.id },
+          { "Field": "Full Name", "Value": client.name || "" },
+          { "Field": "Username", "Value": client.username || "" },
+          { "Field": "Role", "Value": client.role || "client" },
+          { "Field": "Email", "Value": client.email || "" },
+          { "Field": "Phone", "Value": client.phone || "" },
+          { "Field": "Height (cm)", "Value": client.height_cm || "" },
+          { "Field": "Weight (kg)", "Value": client.weight_kg || "" },
+          { "Field": "Registered On", "Value": client.created_at || "" },
+          { "Field": "Target Calories (kcal)", "Value": settings.calorie_target || 2150 },
+          { "Field": "Target Protein (g)", "Value": settings.protein_target || 150 },
+          { "Field": "Target Carbs (g)", "Value": settings.carb_target || 200 },
+          { "Field": "Target Fat (g)", "Value": settings.fat_target || 65 },
+          { "Field": "Target Steps", "Value": settings.step_target || 10000 },
+          { "Field": "Target Active Burn (kcal)", "Value": settings.burn_target_kcal || 500 },
+          { "Field": "Target Sleep (hours)", "Value": settings.sleep_target_hours || 8 },
+          { "Field": "Target Water (Liters)", "Value": settings.water_target_l || 3.5 },
+          { "Field": "Medical History", "Value": client.medical_history || "None reported" },
+          { "Field": "Clinical Blood Biomarkers", "Value": client.blood_reports || "None reported" }
+        ];
+        const wsProfile = window.XLSX.utils.json_to_sheet(profileSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsProfile, "Client Profile");
+
+        // 2. Nutrition Logs Sheet
+        const foodSheetData = foodLogs.length > 0 ? foodLogs.map(f => ({
+          "Date": f.logged_date,
+          "Meal Type": f.meal_type || "Meal",
+          "Dish Name": f.dish_name || "",
+          "Calories (kcal)": f.calories || 0,
+          "Protein (g)": f.protein || 0,
+          "Carbohydrates (g)": f.carbs || 0,
+          "Fat (g)": f.fat || 0,
+          "Fiber (g)": f.fiber || 0,
+          "Notes": f.notes || "",
+          "Created At": f.created_at || ""
+        })) : [{ "Notice": "No food logs recorded yet" }];
+        const wsFood = window.XLSX.utils.json_to_sheet(foodSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsFood, "Nutrition Logs");
+
+        // 3. Fitness & Workouts Sheet
+        const fitSheetData = fitnessLogs.length > 0 ? fitnessLogs.map(f => ({
+          "Date": f.logged_date,
+          "Activity": f.activity_type || "Workout",
+          "Calories Burned": f.calories_burned || 0,
+          "Duration (min)": f.duration_min || 0,
+          "Steps": f.steps || 0,
+          "Distance (km)": f.distance_km || 0,
+          "Avg Heart Rate (bpm)": f.avg_hr || 0,
+          "Notes": f.notes || "",
+          "Created At": f.created_at || ""
+        })) : [{ "Notice": "No fitness logs recorded yet" }];
+        const wsFitness = window.XLSX.utils.json_to_sheet(fitSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsFitness, "Fitness & Workouts");
+
+        // 4. Sleep Architecture Sheet
+        const sleepSheetData = sleepLogs.length > 0 ? sleepLogs.map(s => {
+          const totM = Math.round(parseFloat(s.total_hours || 0) * 60);
+          const sh = Math.floor(totM / 60);
+          const sm = totM % 60;
+          return {
+            "Date": s.logged_date,
+            "Total Hours": s.total_hours || 0,
+            "Duration (Formatted)": `${sh}h ${sm}m`,
+            "Sleep Score": s.sleep_score || 0,
+            "Deep Sleep (Hours)": s.deep_hours || 0,
+            "REM Sleep (Hours)": s.rem_hours || 0,
+            "Light Sleep (Hours)": s.light_hours || 0,
+            "Awake Time (mins)": s.awake_min || 0,
+            "Resting HR (bpm)": s.resting_hr || 0,
+            "Notes": s.notes || "",
+            "Created At": s.created_at || ""
+          };
+        }) : [{ "Notice": "No sleep records recorded yet" }];
+        const wsSleep = window.XLSX.utils.json_to_sheet(sleepSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsSleep, "Sleep Telemetry");
+
+        // 5. Weight & Scale Sheet
+        const weightSheetData = weightLogs.length > 0 ? weightLogs.map(w => ({
+          "Date": w.logged_date,
+          "Weight (kg)": w.weight_kg || 0,
+          "Body Fat (%)": w.body_fat_pct || 0,
+          "Muscle Mass (kg)": w.muscle_mass_kg || 0,
+          "BMI": w.bmi || 0,
+          "Visceral Fat": w.visceral_fat || 0,
+          "Notes": w.notes || "",
+          "Created At": w.created_at || ""
+        })) : [{ "Notice": "No weigh-ins recorded yet" }];
+        const wsWeight = window.XLSX.utils.json_to_sheet(weightSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsWeight, "Weight & Body Comp");
+
+        // 6. Daily Protocols Sheet
+        const protoSheetData = protocols.length > 0 ? protocols.map(p => ({
+          "Date": p.protocol_date,
+          "Habit Title": p.title,
+          "Category": p.category,
+          "Target Value": p.target_value || "",
+          "Completed": p.completed ? "YES" : "NO",
+          "Completed At": p.completed_at || "",
+          "Created At": p.created_at || ""
+        })) : [{ "Notice": "No protocol habits recorded yet" }];
+        const wsProto = window.XLSX.utils.json_to_sheet(protoSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsProto, "Daily Protocols");
+
+        // 7. AI Performance Audits Sheet
+        const auditSheetData = audits.length > 0 ? audits.map(a => ({
+          "Date": a.audit_date,
+          "Overall Day Score": a.overall_score || 0,
+          "Food Score": a.food_score || 0,
+          "Exercise Score": a.exercise_score || 0,
+          "Sleep Score": a.sleep_score || 0,
+          "Recovery Score": a.recovery_score || 0,
+          "Summary": a.summary_text || "",
+          "Strengths": a.strengths || "",
+          "Improvements": a.improvements || "",
+          "Audited At": a.created_at || ""
+        })) : [{ "Notice": "No AI audits recorded yet" }];
+        const wsAudits = window.XLSX.utils.json_to_sheet(auditSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsAudits, "Performance Audits");
+
+        // 8. Workout Sessions Sheet
+        const sessionSheetData = sessions.length > 0 ? sessions.map(ws => ({
+          "Date": ws.session_date,
+          "Split Day": ws.split_day || "",
+          "Duration (min)": ws.duration_min || 0,
+          "Total Volume (kg)": ws.total_volume_kg || 0,
+          "Total Sets": ws.total_sets || 0,
+          "RPE": ws.rpe || 0,
+          "Notes": ws.notes || "",
+          "Created At": ws.created_at || ""
+        })) : [{ "Notice": "No workout sessions recorded yet" }];
+        const wsSessions = window.XLSX.utils.json_to_sheet(sessionSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsSessions, "Workout Sessions");
+
+        // 9. Daily Journals Sheet
+        const journalSheetData = journals.length > 0 ? journals.map(j => ({
+          "Date": j.journal_date,
+          "Mood": j.mood || "",
+          "Energy Level": j.energy_level || "",
+          "Stress Level": j.stress_level || "",
+          "Wins": j.wins || "",
+          "Challenges": j.challenges || "",
+          "Notes": j.notes || "",
+          "Created At": j.created_at || ""
+        })) : [{ "Notice": "No journal entries recorded yet" }];
+        const wsJournals = window.XLSX.utils.json_to_sheet(journalSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsJournals, "Daily Journals");
+
+        // Save workbook
+        window.XLSX.writeFile(wb, filename);
+        this.showToast(`Excel spreadsheet downloaded for ${client.name || client.username}!`);
+      } else {
+        // Fallback: Generate structured CSV export if SheetJS CDN is unavailable
+        let csvContent = `FYN HEALTH OS - CLIENT TELEMETRY EXPORT\n`;
+        csvContent += `Client: ${client.name || client.username} (@${client.username})\n`;
+        csvContent += `Email: ${client.email}\nPhone: ${client.phone}\nExport Date: ${todayStr}\n\n`;
+        csvContent += `--- NUTRITION LOGS ---\nDate,Meal,Dish,Calories,Protein,Carbs,Fat\n`;
+        foodLogs.forEach(f => {
+          csvContent += `"${f.logged_date}","${f.meal_type || ''}","${(f.dish_name || '').replace(/"/g, '""')}",${f.calories || 0},${f.protein || 0},${f.carbs || 0},${f.fat || 0}\n`;
+        });
+        csvContent += `\n--- SLEEP RECORDS ---\nDate,Total Hours,Sleep Score,Deep Hours,REM Hours,Resting HR\n`;
+        sleepLogs.forEach(s => {
+          csvContent += `"${s.logged_date}",${s.total_hours || 0},${s.sleep_score || 0},${s.deep_hours || 0},${s.rem_hours || 0},${s.resting_hr || 0}\n`;
+        });
+        csvContent += `\n--- WEIGHT HISTORY ---\nDate,Weight (kg),Body Fat %,Muscle Mass (kg),BMI\n`;
+        weightLogs.forEach(w => {
+          csvContent += `"${w.logged_date}",${w.weight_kg || 0},${w.body_fat_pct || 0},${w.muscle_mass_kg || 0},${w.bmi || 0}\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `FYN_Client_${sanitizedUsername}_Telemetry_${todayStr}.csv`;
+        link.click();
+        this.showToast(`CSV Telemetry downloaded for ${client.name || client.username}!`);
+      }
+    } catch (err) {
+      console.error('Excel export error:', err);
+      alert('Could not export client data to Excel: ' + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+        this.refreshIcons();
+      }
     }
   }
 

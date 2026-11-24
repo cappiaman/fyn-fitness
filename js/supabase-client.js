@@ -608,16 +608,99 @@ window.FYN_SUPABASE = {
       return { message: 'Logged out successfully' };
     }
 
-    // 6. Multi-User Client Roster (/api/auth/clients)
+    // 6. Multi-User Client Roster (/api/auth/clients) - STRICT ADMIN RESTRICTION
     if (path === '/api/auth/clients') {
-      const { data: clientList, error } = await sb.from('users').select('id, username, email, name, role, phone, height_cm, weight_kg').order('id', { ascending: true });
+      if (!activeUser || activeUser.role !== 'admin') {
+        throw new Error('Forbidden: Client directory is restricted to administrator profiles only.');
+      }
+      const { data: clientList, error } = await sb
+        .from('users')
+        .select('id, username, email, name, role, phone, height_cm, weight_kg, medical_history, blood_reports, created_at')
+        .order('id', { ascending: true });
       if (error) throw error;
-      return { clients: clientList || [], active_user_id: activeUserId };
+
+      // Parallel telemetry count queries for high-performance admin dashboard overview
+      const [
+        { data: foodCounts },
+        { data: fitCounts },
+        { data: sleepCounts },
+        { data: weightCounts },
+        { data: habitCounts }
+      ] = await Promise.all([
+        sb.from('food_logs').select('user_id'),
+        sb.from('fitness_logs').select('user_id'),
+        sb.from('sleep_logs').select('user_id'),
+        sb.from('weight_logs').select('user_id'),
+        sb.from('daily_protocols').select('user_id')
+      ]);
+
+      const countMap = {};
+      (clientList || []).forEach(c => {
+        countMap[c.id] = { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0 };
+      });
+      (foodCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].food++; });
+      (fitCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].fitness++; });
+      (sleepCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].sleep++; });
+      (weightCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].weight++; });
+      (habitCounts || []).forEach(r => { if (countMap[r.user_id]) countMap[r.user_id].habits++; });
+
+      const clientsWithStats = (clientList || []).map(c => ({
+        ...c,
+        stats: countMap[c.id] || { food: 0, fitness: 0, sleep: 0, weight: 0, habits: 0 }
+      }));
+
+      return { clients: clientsWithStats, active_user_id: activeUserId };
+    }
+
+    // 6b. Admin Full Client Telemetry Export (/api/admin/client-full-data)
+    if (path === '/api/admin/client-full-data') {
+      if (!activeUser || activeUser.role !== 'admin') {
+        throw new Error('Forbidden: Client full telemetry export is restricted to administrator profiles only.');
+      }
+      const targetClientId = parseInt(params.client_id || body.client_id || body.user_id, 10);
+      if (!targetClientId) throw new Error('Missing client_id parameter.');
+
+      const [
+        { data: uData },
+        { data: sData },
+        { data: fData },
+        { data: fitData },
+        { data: slData },
+        { data: wData },
+        { data: pData },
+        { data: jData },
+        { data: aData },
+        { data: wsData }
+      ] = await Promise.all([
+        sb.from('users').select('id, username, email, name, role, phone, height_cm, weight_kg, medical_history, blood_reports, created_at').eq('id', targetClientId).limit(1),
+        sb.from('user_settings').select('*').eq('user_id', targetClientId).limit(1),
+        sb.from('food_logs').select('*').eq('user_id', targetClientId).order('logged_date', { ascending: false }),
+        sb.from('fitness_logs').select('*').eq('user_id', targetClientId).order('logged_date', { ascending: false }),
+        sb.from('sleep_logs').select('*').eq('user_id', targetClientId).order('logged_date', { ascending: false }),
+        sb.from('weight_logs').select('*').eq('user_id', targetClientId).order('logged_date', { ascending: false }),
+        sb.from('daily_protocols').select('*').eq('user_id', targetClientId).order('protocol_date', { ascending: false }),
+        sb.from('daily_journals').select('*').eq('user_id', targetClientId).order('journal_date', { ascending: false }),
+        sb.from('daily_ai_audits').select('*').eq('user_id', targetClientId).order('audit_date', { ascending: false }),
+        sb.from('workout_sessions').select('*').eq('user_id', targetClientId).order('session_date', { ascending: false })
+      ]);
+
+      return {
+        client: (uData && uData[0]) || null,
+        settings: (sData && sData[0]) || {},
+        food_logs: fData || [],
+        fitness_logs: fitData || [],
+        sleep_logs: slData || [],
+        weight_logs: wData || [],
+        daily_protocols: pData || [],
+        daily_journals: jData || [],
+        daily_ai_audits: aData || [],
+        workout_sessions: wsData || []
+      };
     }
 
     // 7. Switch Client Account
     if (path === '/api/auth/switch-client' && method === 'POST') {
-      const targetId = parseInt(body.client_id, 10);
+      const targetId = parseInt(body.client_id || body.user_id, 10);
       const { data: tUsers } = await sb.from('users').select('*').eq('id', targetId).limit(1);
       if (!tUsers || tUsers.length === 0) throw new Error('Client not found');
       const targetUser = tUsers[0];

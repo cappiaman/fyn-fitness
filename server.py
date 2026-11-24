@@ -1271,10 +1271,68 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             if user.get('role') != 'admin':
                 conn.close()
                 return self.send_json({"error": "Forbidden: Client directory is restricted to administrator profiles only."}, status=403)
-            c.execute('SELECT id, username, email, name, role, phone, height_cm, weight_kg, created_at FROM users ORDER BY name ASC')
+            c.execute('SELECT id, username, email, name, role, phone, height_cm, weight_kg, medical_history, blood_reports, created_at FROM users ORDER BY id ASC')
             clients = [dict(r) for r in c.fetchall()]
+            for cl in clients:
+                cid = cl['id']
+                c.execute('SELECT COUNT(*) FROM food_logs WHERE user_id = ?', (cid,))
+                f_count = c.fetchone()[0]
+                c.execute('SELECT COUNT(*) FROM fitness_logs WHERE user_id = ?', (cid,))
+                fit_count = c.fetchone()[0]
+                c.execute('SELECT COUNT(*) FROM sleep_logs WHERE user_id = ?', (cid,))
+                sl_count = c.fetchone()[0]
+                c.execute('SELECT COUNT(*) FROM weight_logs WHERE user_id = ?', (cid,))
+                w_count = c.fetchone()[0]
+                c.execute('SELECT COUNT(*) FROM daily_protocols WHERE user_id = ?', (cid,))
+                h_count = c.fetchone()[0]
+                cl['stats'] = {'food': f_count, 'fitness': fit_count, 'sleep': sl_count, 'weight': w_count, 'habits': h_count}
             conn.close()
             return self.send_json({"clients": clients, "active_user_id": user_id})
+
+        # 2b. Full Client Telemetry Export (ONLY ACCESSIBLE TO ADMIN)
+        if path == '/api/admin/client-full-data':
+            if user.get('role') != 'admin':
+                conn.close()
+                return self.send_json({"error": "Forbidden: Restricted to admin."}, status=403)
+            client_id = query.get('client_id', [None])[0]
+            if not client_id:
+                conn.close()
+                return self.send_json({"error": "client_id required"}, status=400)
+            
+            c.execute('SELECT id, username, email, name, role, phone, height_cm, weight_kg, medical_history, blood_reports, created_at FROM users WHERE id = ?', (client_id,))
+            target_user = c.fetchone()
+            c.execute('SELECT * FROM user_settings WHERE user_id = ?', (client_id,))
+            target_settings = c.fetchone()
+            c.execute('SELECT * FROM food_logs WHERE user_id = ? ORDER BY logged_date DESC', (client_id,))
+            f_logs = [dict(r) for r in c.fetchall()]
+            c.execute('SELECT * FROM fitness_logs WHERE user_id = ? ORDER BY logged_date DESC', (client_id,))
+            fit_logs = [dict(r) for r in c.fetchall()]
+            c.execute('SELECT * FROM sleep_logs WHERE user_id = ? ORDER BY logged_date DESC', (client_id,))
+            sl_logs = [dict(r) for r in c.fetchall()]
+            c.execute('SELECT * FROM weight_logs WHERE user_id = ? ORDER BY logged_date DESC', (client_id,))
+            w_logs = [dict(r) for r in c.fetchall()]
+            c.execute('SELECT * FROM daily_protocols WHERE user_id = ? ORDER BY protocol_date DESC', (client_id,))
+            p_logs = [dict(r) for r in c.fetchall()]
+            c.execute('SELECT * FROM daily_journals WHERE user_id = ? ORDER BY journal_date DESC', (client_id,))
+            j_logs = [dict(r) for r in c.fetchall()]
+            c.execute('SELECT * FROM daily_ai_audits WHERE user_id = ? ORDER BY audit_date DESC', (client_id,))
+            a_logs = [dict(r) for r in c.fetchall()]
+            c.execute('SELECT * FROM workout_sessions WHERE user_id = ? ORDER BY session_date DESC', (client_id,))
+            ws_logs = [dict(r) for r in c.fetchall()]
+            conn.close()
+
+            return self.send_json({
+                "client": dict(target_user) if target_user else None,
+                "settings": dict(target_settings) if target_settings else {},
+                "food_logs": f_logs,
+                "fitness_logs": fit_logs,
+                "sleep_logs": sl_logs,
+                "weight_logs": w_logs,
+                "daily_protocols": p_logs,
+                "daily_journals": j_logs,
+                "daily_ai_audits": a_logs,
+                "workout_sessions": ws_logs
+            })
 
         # 3. Main Dashboard Aggregation
         if path == '/api/dashboard':
