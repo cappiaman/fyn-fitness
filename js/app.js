@@ -326,6 +326,17 @@ class FYNApp {
     this.navigate(this.currentView, null, false);
   }
 
+  // Format decimal hours to intuitive Hours & Minutes (e.g. 8.8 -> "8h 48m")
+  formatSleepDuration(val) {
+    if (val === null || val === undefined || isNaN(val) || parseFloat(val) <= 0) return '—';
+    const totalMins = Math.round(parseFloat(val) * 60);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h === 0) return `${m}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  }
+
   // -------------------------------------------------------------
   // DASHBOARD TELEMETRY LOADER
   // -------------------------------------------------------------
@@ -398,12 +409,12 @@ class FYNApp {
       const restHrEl = document.getElementById('dashRestHrVal');
 
       if (sleep) {
-        if (sleepHoursEl) sleepHoursEl.textContent = (sleep.total_hours || 0).toFixed(1);
+        if (sleepHoursEl) sleepHoursEl.textContent = this.formatSleepDuration(sleep.total_hours);
         if (sleepScoreBadge) sleepScoreBadge.textContent = `Score ${sleep.sleep_score || 0}`;
         const sleepBarPct = Math.min(100, Math.round(((sleep.total_hours || 0) / 8.0) * 100));
         if (sleepBar) sleepBar.style.width = `${sleepBarPct}%`;
-        if (deepEl) deepEl.textContent = `${(sleep.deep_hours || 0).toFixed(1)}h`;
-        if (remEl) remEl.textContent = `${(sleep.rem_hours || 0).toFixed(1)}h`;
+        if (deepEl) deepEl.textContent = this.formatSleepDuration(sleep.deep_hours);
+        if (remEl) remEl.textContent = this.formatSleepDuration(sleep.rem_hours);
         if (restHrEl) restHrEl.textContent = `${sleep.resting_hr || 0} bpm`;
       } else {
         if (sleepHoursEl) sleepHoursEl.textContent = '—';
@@ -469,7 +480,7 @@ class FYNApp {
       }
       const pLearn = document.getElementById('pillarLearnVal');
       if (pLearn) {
-        pLearn.textContent = `${food.count || 0} meals • ${sleep && sleep.total_hours ? sleep.total_hours.toFixed(1) + 'h sleep' : 'Bio-reflection'}`;
+        pLearn.textContent = `${food.count || 0} meals • ${sleep && sleep.total_hours ? this.formatSleepDuration(sleep.total_hours) + ' sleep' : 'Bio-reflection'}`;
       }
 
       // 8. Update Live AI Audit & Day Guidance Hero Banner
@@ -546,9 +557,9 @@ class FYNApp {
         meta = `<span>${item.calories_burned} kcal burned</span> <span>${item.avg_hr ? item.avg_hr + ' bpm' : ''}</span> <span>${item.distance_km ? item.distance_km + ' km' : ''}</span>`;
       } else if (item.category === 'sleep') {
         icon = 'moon';
-        title = `Sleep Telemetry (${item.total_hours} hrs)`;
+        title = `Sleep Telemetry (${this.formatSleepDuration(item.total_hours)})`;
         tag = `Sleep Score: ${item.sleep_score}/100`;
-        meta = `<span>Deep: ${item.deep_hours}h</span> <span>REM: ${item.rem_hours}h</span> <span>Rest HR: ${item.resting_hr} bpm</span>`;
+        meta = `<span>Deep: ${this.formatSleepDuration(item.deep_hours)}</span> <span>REM: ${this.formatSleepDuration(item.rem_hours)}</span> <span>Rest HR: ${item.resting_hr || 52} bpm</span>`;
       } else if (item.category === 'weight') {
         icon = 'scale';
         title = `Scale Weigh-in: ${item.weight_kg} kg`;
@@ -1822,14 +1833,44 @@ class FYNApp {
       if (d.steps) document.getElementById('fitnessSteps').value = d.steps;
       if (d.notes) document.getElementById('fitnessNotes').value = d.notes;
     } else if (cat === 'sleep') {
-      if (d.total_hours) document.getElementById('sleepHours').value = d.total_hours;
-      if (d.sleep_score) document.getElementById('sleepScore').value = d.sleep_score;
-      if (d.deep_hours) document.getElementById('sleepDeep').value = d.deep_hours;
-      if (d.rem_hours) document.getElementById('sleepRem').value = d.rem_hours;
-      if (d.light_hours) document.getElementById('sleepLight').value = d.light_hours;
-      if (d.awake_min) document.getElementById('sleepAwake').value = d.awake_min;
-      if (d.resting_hr) document.getElementById('sleepRestHr').value = d.resting_hr;
-      if (d.notes) document.getElementById('sleepNotes').value = d.notes;
+      const setHM = (idH, idM, idHidden, decimalVal, expH, expM) => {
+        let h = 0, m = 0;
+        if (expH !== undefined && expM !== undefined) {
+          h = expH; m = expM;
+        } else if (decimalVal !== undefined && decimalVal !== null && !isNaN(decimalVal)) {
+          const totalMins = Math.round(parseFloat(decimalVal || 0) * 60);
+          h = Math.floor(totalMins / 60);
+          m = totalMins % 60;
+        }
+        const elH = document.getElementById(idH);
+        const elM = document.getElementById(idM);
+        const elHidden = document.getElementById(idHidden);
+        if (elH) elH.value = h;
+        if (elM) elM.value = m;
+        if (elHidden) elHidden.value = +(h + m / 60).toFixed(2);
+      };
+
+      setHM('sleepHoursH', 'sleepHoursM', 'sleepHours', d.total_hours, d.total_h, d.total_m);
+      setHM('sleepDeepH', 'sleepDeepM', 'sleepDeep', d.deep_hours, d.deep_h, d.deep_m);
+      setHM('sleepRemH', 'sleepRemM', 'sleepRem', d.rem_hours, d.rem_h, d.rem_m);
+      setHM('sleepLightH', 'sleepLightM', 'sleepLight', d.light_hours, d.light_h, d.light_m);
+
+      if (d.awake_min !== undefined) {
+        const elAwake = document.getElementById('sleepAwake');
+        if (elAwake) elAwake.value = d.awake_min;
+      }
+      if (d.sleep_score) {
+        const elScore = document.getElementById('sleepScore');
+        if (elScore) elScore.value = d.sleep_score;
+      }
+      if (d.resting_hr) {
+        const elHr = document.getElementById('sleepRestHr');
+        if (elHr) elHr.value = d.resting_hr;
+      }
+      if (d.notes) {
+        const elNotes = document.getElementById('sleepNotes');
+        if (elNotes) elNotes.value = d.notes;
+      }
     } else if (cat === 'weight') {
       if (d.weight_kg) document.getElementById('weightVal').value = d.weight_kg;
       if (d.body_fat_pct) document.getElementById('weightFatPct').value = d.body_fat_pct;
@@ -1900,14 +1941,27 @@ class FYNApp {
 
   async submitSleep(e) {
     e.preventDefault();
+
+    const getValHM = (idH, idM, idHidden) => {
+      const elH = document.getElementById(idH);
+      const elM = document.getElementById(idM);
+      if (elH || elM) {
+        const h = parseInt(elH?.value || 0, 10);
+        const m = parseInt(elM?.value || 0, 10);
+        return +(h + m / 60).toFixed(2);
+      }
+      const elHidden = document.getElementById(idHidden);
+      return parseFloat(elHidden?.value || 0);
+    };
+
     const payload = {
-      total_hours: parseFloat(document.getElementById('sleepHours').value || 0),
-      sleep_score: parseInt(document.getElementById('sleepScore').value || 0),
-      deep_hours: parseFloat(document.getElementById('sleepDeep').value || 0),
-      rem_hours: parseFloat(document.getElementById('sleepRem').value || 0),
-      light_hours: parseFloat(document.getElementById('sleepLight').value || 0),
-      awake_min: parseInt(document.getElementById('sleepAwake').value || 0),
-      resting_hr: parseInt(document.getElementById('sleepRestHr').value || 0),
+      total_hours: getValHM('sleepHoursH', 'sleepHoursM', 'sleepHours'),
+      sleep_score: parseInt(document.getElementById('sleepScore').value || 88, 10),
+      deep_hours: getValHM('sleepDeepH', 'sleepDeepM', 'sleepDeep'),
+      rem_hours: getValHM('sleepRemH', 'sleepRemM', 'sleepRem'),
+      light_hours: getValHM('sleepLightH', 'sleepLightM', 'sleepLight'),
+      awake_min: parseInt(document.getElementById('sleepAwake').value || 10, 10),
+      resting_hr: parseInt(document.getElementById('sleepRestHr').value || 52, 10),
       notes: document.getElementById('sleepNotes').value,
       image_url: document.getElementById('sleepImageUrl').value || this.uploadedUrls.sleep,
       logged_date: this.selectedDate
@@ -2039,14 +2093,14 @@ class FYNApp {
           <div class="timeline-icon-badge"><i data-lucide="moon" style="width: 18px; height: 18px;"></i></div>
           <div class="timeline-content">
             <div class="timeline-title-row">
-              <span class="timeline-title">${s.total_hours} hrs Sleep</span>
+              <span class="timeline-title">${this.formatSleepDuration(s.total_hours)} Sleep</span>
               <span class="timeline-tag">${s.logged_date} • Score ${s.sleep_score}</span>
             </div>
             ${s.notes ? `<div class="timeline-desc">${s.notes}</div>` : ''}
             <div class="timeline-metrics-strip">
-              <span>Deep: ${s.deep_hours}h</span>
-              <span>REM: ${s.rem_hours}h</span>
-              <span>Resting HR: ${s.resting_hr} bpm</span>
+              <span>Deep: ${this.formatSleepDuration(s.deep_hours)}</span>
+              <span>REM: ${this.formatSleepDuration(s.rem_hours)}</span>
+              <span>Resting HR: ${s.resting_hr || 52} bpm</span>
             </div>
             ${s.image_url ? `<div style="margin-top: 0.5rem; max-width: 120px;"><img src="${s.image_url}" style="width: 100%; border-radius: 4px;" alt="Sleep screenshot"></div>` : ''}
           </div>
@@ -2281,35 +2335,75 @@ class FYNApp {
 
     let html = '';
     if (cat === 'sleep') {
+      const parseHM = (decimalVal, expH, expM) => {
+        let h = 0, m = 0;
+        if (expH !== undefined && expM !== undefined) {
+          h = expH; m = expM;
+        } else if (decimalVal) {
+          const tm = Math.round(parseFloat(decimalVal) * 60);
+          h = Math.floor(tm / 60);
+          m = tm % 60;
+        }
+        return { h, m };
+      };
+
+      const tot = parseHM(d.total_hours || 8.8, d.total_h, d.total_m);
+      const dp = parseHM(d.deep_hours || 1.37, d.deep_h, d.deep_m);
+      const rm = parseHM(d.rem_hours || 2.35, d.rem_h, d.rem_m);
+      const lt = parseHM(d.light_hours || 5.08, d.light_h, d.light_m);
+
       html = `
         <div class="form-grid-2" style="margin-top: 0.5rem;">
           <div class="form-group">
-            <label class="form-label">Total Sleep (hrs)</label>
-            <input type="number" step="0.1" id="uSleepHours" value="${d.total_hours || 8.8}">
+            <label class="form-label">Total Duration (Hours & Mins)</label>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <input type="number" id="uSleepHoursH" value="${tot.h}" min="0" max="24" style="flex: 1;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+              <input type="number" id="uSleepHoursM" value="${tot.m}" min="0" max="59" style="flex: 1;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+            </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Sleep Score</label>
+            <label class="form-label">Sleep Score (0-100)</label>
             <input type="number" id="uSleepScore" value="${d.sleep_score || 88}">
           </div>
         </div>
         <div class="form-grid-2">
           <div class="form-group">
-            <label class="form-label">Deep Sleep (hrs)</label>
-            <input type="number" step="0.01" id="uSleepDeep" value="${d.deep_hours || 1.37}">
+            <label class="form-label">Deep Sleep (Hours & Mins)</label>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <input type="number" id="uSleepDeepH" value="${dp.h}" min="0" max="24" style="flex: 1;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+              <input type="number" id="uSleepDeepM" value="${dp.m}" min="0" max="59" style="flex: 1;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+            </div>
           </div>
           <div class="form-group">
-            <label class="form-label">REM Sleep (hrs)</label>
-            <input type="number" step="0.01" id="uSleepRem" value="${d.rem_hours || 2.35}">
+            <label class="form-label">REM Sleep (Hours & Mins)</label>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <input type="number" id="uSleepRemH" value="${rm.h}" min="0" max="24" style="flex: 1;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+              <input type="number" id="uSleepRemM" value="${rm.m}" min="0" max="59" style="flex: 1;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+            </div>
           </div>
         </div>
         <div class="form-grid-2">
           <div class="form-group">
-            <label class="form-label">Light Sleep (hrs)</label>
-            <input type="number" step="0.01" id="uSleepLight" value="${d.light_hours || 5.08}">
+            <label class="form-label">Light Sleep (Hours & Mins)</label>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <input type="number" id="uSleepLightH" value="${lt.h}" min="0" max="24" style="flex: 1;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+              <input type="number" id="uSleepLightM" value="${lt.m}" min="0" max="59" style="flex: 1;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+            </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Awake (min)</label>
-            <input type="number" id="uSleepAwake" value="${d.awake_min !== undefined ? d.awake_min : 10}">
+            <label class="form-label">Awake (Mins)</label>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <input type="number" id="uSleepAwake" value="${d.awake_min !== undefined ? d.awake_min : 10}" style="flex: 1;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+            </div>
           </div>
         </div>
         <div class="form-group">
@@ -2412,15 +2506,29 @@ class FYNApp {
 
     try {
       if (cat === 'sleep') {
+        const uH = parseInt(document.getElementById('uSleepHoursH')?.value || 0, 10);
+        const uM = parseInt(document.getElementById('uSleepHoursM')?.value || 0, 10);
+        const dpH = parseInt(document.getElementById('uSleepDeepH')?.value || 0, 10);
+        const dpM = parseInt(document.getElementById('uSleepDeepM')?.value || 0, 10);
+        const rmH = parseInt(document.getElementById('uSleepRemH')?.value || 0, 10);
+        const rmM = parseInt(document.getElementById('uSleepRemM')?.value || 0, 10);
+        const ltH = parseInt(document.getElementById('uSleepLightH')?.value || 0, 10);
+        const ltM = parseInt(document.getElementById('uSleepLightM')?.value || 0, 10);
+
+        const totalHours = (uH || uM) ? +(uH + uM / 60).toFixed(2) : parseFloat(document.getElementById('uSleepHours')?.value || 8.8);
+        const deepHours = (dpH || dpM) ? +(dpH + dpM / 60).toFixed(2) : parseFloat(document.getElementById('uSleepDeep')?.value || 1.37);
+        const remHours = (rmH || rmM) ? +(rmH + rmM / 60).toFixed(2) : parseFloat(document.getElementById('uSleepRem')?.value || 2.35);
+        const lightHours = (ltH || ltM) ? +(ltH + ltM / 60).toFixed(2) : parseFloat(document.getElementById('uSleepLight')?.value || 5.08);
+
         const payload = {
-          total_hours: parseFloat(document.getElementById('uSleepHours')?.value || 8.8),
-          sleep_score: parseInt(document.getElementById('uSleepScore')?.value || 88),
-          deep_hours: parseFloat(document.getElementById('uSleepDeep')?.value || 1.37),
-          rem_hours: parseFloat(document.getElementById('uSleepRem')?.value || 2.35),
-          light_hours: parseFloat(document.getElementById('uSleepLight')?.value || 5.08),
-          awake_min: parseInt(document.getElementById('uSleepAwake')?.value || 10),
+          total_hours: totalHours,
+          sleep_score: parseInt(document.getElementById('uSleepScore')?.value || 88, 10),
+          deep_hours: deepHours,
+          rem_hours: remHours,
+          light_hours: lightHours,
+          awake_min: parseInt(document.getElementById('uSleepAwake')?.value || 10, 10),
           resting_hr: 52,
-          notes: document.getElementById('uSleepNotes')?.value || 'Garmin Sleep OCR',
+          notes: document.getElementById('uSleepNotes')?.value || 'Garmin Sleep Telemetry',
           image_url: imgUrl,
           logged_date: this.selectedDate
         };

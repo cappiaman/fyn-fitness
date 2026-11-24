@@ -1,5 +1,5 @@
 // FYN OS Service Worker - Network-First Dynamic Telemetry
-const CACHE_NAME = 'fyn-app-cache-v5';
+const CACHE_NAME = 'fyn-app-cache-v6';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

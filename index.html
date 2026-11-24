@@ -30,7 +30,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   
   <!-- Monochrome Stylesheet -->
-  <link rel="stylesheet" href="css/styles.css?v=2.7.0">
+  <link rel="stylesheet" href="css/styles.css?v=2.8.0">
 </head>
 <body>
 
@@ -1254,8 +1254,18 @@
               <form id="sleepForm" onsubmit="app.submitSleep(event)">
                 <div class="form-grid-2">
                   <div class="form-group">
-                    <label class="form-label">Total Duration (Hours)</label>
-                    <input type="number" step="0.1" id="sleepHours" placeholder="7.8" required>
+                    <label class="form-label">Total Duration (Hours & Mins)</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                      <div style="flex: 1; display: flex; align-items: center; gap: 0.35rem;">
+                        <input type="number" id="sleepHoursH" placeholder="8" min="0" max="24" style="flex: 1;" required>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+                      </div>
+                      <div style="flex: 1; display: flex; align-items: center; gap: 0.35rem;">
+                        <input type="number" id="sleepHoursM" placeholder="48" min="0" max="59" style="flex: 1;" required>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+                      </div>
+                    </div>
+                    <input type="hidden" id="sleepHours" value="8.8">
                   </div>
                   <div class="form-group">
                     <label class="form-label">Sleep Score (0-100)</label>
@@ -1265,23 +1275,56 @@
 
                 <div class="form-grid-2">
                   <div class="form-group">
-                    <label class="form-label">Deep Sleep (Hours)</label>
-                    <input type="number" step="0.1" id="sleepDeep" placeholder="1.9">
+                    <label class="form-label">Deep Sleep (Hours & Mins)</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                      <div style="flex: 1; display: flex; align-items: center; gap: 0.35rem;">
+                        <input type="number" id="sleepDeepH" placeholder="1" min="0" max="24" style="flex: 1;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+                      </div>
+                      <div style="flex: 1; display: flex; align-items: center; gap: 0.35rem;">
+                        <input type="number" id="sleepDeepM" placeholder="22" min="0" max="59" style="flex: 1;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+                      </div>
+                    </div>
+                    <input type="hidden" id="sleepDeep" value="1.37">
                   </div>
                   <div class="form-group">
-                    <label class="form-label">REM Sleep (Hours)</label>
-                    <input type="number" step="0.1" id="sleepRem" placeholder="2.0">
+                    <label class="form-label">REM Sleep (Hours & Mins)</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                      <div style="flex: 1; display: flex; align-items: center; gap: 0.35rem;">
+                        <input type="number" id="sleepRemH" placeholder="2" min="0" max="24" style="flex: 1;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+                      </div>
+                      <div style="flex: 1; display: flex; align-items: center; gap: 0.35rem;">
+                        <input type="number" id="sleepRemM" placeholder="21" min="0" max="59" style="flex: 1;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+                      </div>
+                    </div>
+                    <input type="hidden" id="sleepRem" value="2.35">
                   </div>
                 </div>
 
                 <div class="form-grid-2">
                   <div class="form-group">
-                    <label class="form-label">Light Sleep (Hours)</label>
-                    <input type="number" step="0.1" id="sleepLight" placeholder="3.9">
+                    <label class="form-label">Light Sleep (Hours & Mins)</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                      <div style="flex: 1; display: flex; align-items: center; gap: 0.35rem;">
+                        <input type="number" id="sleepLightH" placeholder="5" min="0" max="24" style="flex: 1;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">hrs</span>
+                      </div>
+                      <div style="flex: 1; display: flex; align-items: center; gap: 0.35rem;">
+                        <input type="number" id="sleepLightM" placeholder="5" min="0" max="59" style="flex: 1;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+                      </div>
+                    </div>
+                    <input type="hidden" id="sleepLight" value="5.08">
                   </div>
                   <div class="form-group">
                     <label class="form-label">Awake Time (Mins)</label>
-                    <input type="number" id="sleepAwake" placeholder="18">
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                      <input type="number" id="sleepAwake" placeholder="10" min="0" style="flex: 1;">
+                      <span style="font-size: 0.8rem; color: var(--text-secondary);">mins</span>
+                    </div>
                   </div>
                 </div>
 
@@ -2390,7 +2433,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Client-Side OCR Engine for Garmin/Apple Health Telemetry -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/supabase-client.js?v=2.7.0"></script>
-  <script src="js/app.js?v=2.7.0"></script>
+  <script src="js/supabase-client.js?v=2.8.0"></script>
+  <script src="js/app.js?v=2.8.0"></script>
 </body>
 </html>
