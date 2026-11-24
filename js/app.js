@@ -111,6 +111,7 @@ class FYNApp {
 
   // -------------------------------------------------------------
   // API Fetch Helper & Strict Auth Enforcement
+  // Direct Supabase Cloud Backend on Production + Local Fallback
   // -------------------------------------------------------------
   async apiFetch(url, options = {}) {
     options.headers = options.headers || {};
@@ -121,17 +122,39 @@ class FYNApp {
       options.headers['Content-Type'] = 'application/json';
       options.body = JSON.stringify(options.body);
     }
+
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    // On production (fynindia.shop) or whenever Supabase is active, route directly to Supabase cloud!
+    if (!isLocalDev && window.FYN_SUPABASE && window.FYN_SUPABASE.canHandle(url)) {
+      try {
+        return await window.FYN_SUPABASE.handleApiRequest(url, options, this.token);
+      } catch (sbErr) {
+        console.error('[Supabase Cloud API Error]:', sbErr);
+        throw sbErr;
+      }
+    }
+
+    // On localhost, attempt local server with seamless Supabase fallback
     try {
       const res = await fetch(url, options);
-      const data = await res.json();
       if (!res.ok) {
+        if (window.FYN_SUPABASE && window.FYN_SUPABASE.canHandle(url)) {
+          console.warn('[FYN] Local server returned ' + res.status + ', routing through Supabase Cloud...');
+          return await window.FYN_SUPABASE.handleApiRequest(url, options, this.token);
+        }
+        const data = await res.json().catch(() => ({}));
         if (res.status === 401 && !url.includes('/api/auth/')) {
           this.renderUnauthenticatedState();
         }
         throw new Error(data.error || 'Request failed');
       }
-      return data;
+      return await res.json();
     } catch (err) {
+      if (window.FYN_SUPABASE && window.FYN_SUPABASE.canHandle(url)) {
+        console.warn('[FYN] Routing request to Supabase Cloud backend:', url);
+        return await window.FYN_SUPABASE.handleApiRequest(url, options, this.token);
+      }
       console.error('[API Error]:', err);
       throw err;
     }
@@ -3079,32 +3102,14 @@ class FYNApp {
     const password = document.getElementById('loginPassword').value;
 
     try {
-      // 1. Authenticate with local / production API
-      let res = null;
-      try {
-        res = await this.apiFetch('/api/auth/login', {
-          method: 'POST',
-          body: { username, password }
-        });
-      } catch (apiErr) {
-        // Fallback to Supabase cloud auth directly if API is unreachable
-        if (window.FYN_SUPABASE) {
-          console.log('[FYN Auth] Using direct Supabase cloud authentication...');
-          res = await window.FYN_SUPABASE.login(username, password);
-        } else {
-          throw apiErr;
-        }
-      }
+      const res = await this.apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: { username, password }
+      });
 
       if (res && res.token) {
         this.token = res.token;
         localStorage.setItem('fyn_session_token', res.token);
-
-        // Also sync session to Supabase
-        if (window.FYN_SUPABASE) {
-          window.FYN_SUPABASE.login(username, password).catch(() => {});
-        }
-
         this.closeAuthModal();
         await this.checkAuth();
         this.showToast(`Welcome back, ${res.user.name || res.user.username}!`);
@@ -3123,30 +3128,14 @@ class FYNApp {
     const password = document.getElementById('regPassword').value;
 
     try {
-      let res = null;
-      try {
-        res = await this.apiFetch('/api/auth/register', {
-          method: 'POST',
-          body: { name, phone, username, email, password }
-        });
-      } catch (apiErr) {
-        if (window.FYN_SUPABASE) {
-          console.log('[FYN Auth] Registering directly in Supabase cloud database...');
-          res = await window.FYN_SUPABASE.register({ name, phone, username, email, password });
-        } else {
-          throw apiErr;
-        }
-      }
+      const res = await this.apiFetch('/api/auth/register', {
+        method: 'POST',
+        body: { name, phone, username, email, password }
+      });
 
       if (res && res.token) {
         this.token = res.token;
         localStorage.setItem('fyn_session_token', res.token);
-
-        // Also save to Supabase
-        if (window.FYN_SUPABASE) {
-          window.FYN_SUPABASE.register({ name, phone, username, email, password }).catch(() => {});
-        }
-
         this.closeAuthModal();
         await this.checkAuth();
         this.showToast(`Account created for ${name}! Saved to Supabase.`);
