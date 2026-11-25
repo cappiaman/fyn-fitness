@@ -368,6 +368,44 @@ def init_db():
         created_at TEXT NOT NULL
     )
     ''')
+
+    # Medical, Tablets, Injections, Illness & Blood Test Logs
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS medical_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        log_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        dosage TEXT DEFAULT '',
+        frequency TEXT DEFAULT '',
+        timing TEXT DEFAULT '',
+        severity TEXT DEFAULT '',
+        status TEXT DEFAULT 'active',
+        start_date TEXT NOT NULL,
+        end_date TEXT DEFAULT '',
+        lab_results TEXT DEFAULT '',
+        doctor_name TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        image_url TEXT DEFAULT '',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    )
+    ''')
+
+    c.execute('PRAGMA table_info(medical_logs)')
+    med_cols = [col[1] for col in c.fetchall()]
+    for cname, ctype in [
+        ('dosage', "TEXT DEFAULT ''"),
+        ('frequency', "TEXT DEFAULT ''"),
+        ('timing', "TEXT DEFAULT ''"),
+        ('severity', "TEXT DEFAULT ''"),
+        ('status', "TEXT DEFAULT 'active'"),
+        ('lab_results', "TEXT DEFAULT ''"),
+        ('doctor_name', "TEXT DEFAULT ''"),
+        ('image_url', "TEXT DEFAULT ''")
+    ]:
+        if cname not in med_cols:
+            c.execute(f"ALTER TABLE medical_logs ADD COLUMN {cname} {ctype}")
     
     conn.commit()
     conn.close()
@@ -743,6 +781,130 @@ def heuristic_vision_extract(category: str):
     return {}
 
 # -------------------------------------------------------------
+# HealthifyMe-Calibrated Indian Food AI Macro Estimator
+# -------------------------------------------------------------
+HEALTHIFYME_INDIAN_FOODS_DB = [
+    {"name": "Salted Peanuts (30g)", "alias": ["salted peanuts", "peanuts salted", "namkeen peanuts", "peanuts", "salted peanut"], "cal": 170, "p": 8.0, "c": 5.0, "f": 14.0, "fib": 2.5, "type": "Snack", "notes": "HealthifyMe Verified: 30g salted crunchy peanuts"},
+    {"name": "Salted Peanuts (100g)", "alias": ["salted peanuts 100g", "100g peanuts", "peanuts 100g", "100g salted peanuts"], "cal": 567, "p": 26.0, "c": 16.0, "f": 49.0, "fib": 8.5, "type": "Snack", "notes": "HealthifyMe Verified: 100g salted peanuts"},
+    {"name": "Roasted Peanuts (plain / 30g)", "alias": ["roasted peanuts", "bhuna peanuts", "mungfali", "singdana"], "cal": 166, "p": 7.8, "c": 4.8, "f": 14.0, "fib": 2.6, "type": "Snack", "notes": "HealthifyMe: 30g dry roasted peanuts"},
+    {"name": "Roti / Phulka (1 piece)", "alias": ["roti", "chapati", "phulka", "fulka", "chapatti"], "cal": 85, "p": 3.0, "c": 18.0, "f": 0.4, "fib": 2.2, "type": "Lunch", "notes": "HealthifyMe: 1 wheat roti (30g dough, no ghee)"},
+    {"name": "Butter / Ghee Roti (1 piece)", "alias": ["ghee roti", "butter roti"], "cal": 110, "p": 3.0, "c": 18.0, "f": 3.0, "fib": 2.2, "type": "Lunch", "notes": "HealthifyMe: 1 wheat roti with 1/2 tsp ghee"},
+    {"name": "Paneer (raw, 100g)", "alias": ["paneer", "cottage cheese", "paneer 100g", "raw paneer"], "cal": 265, "p": 18.3, "c": 3.0, "f": 20.8, "fib": 0.0, "type": "Dinner", "notes": "HealthifyMe: 100g full-fat fresh paneer"},
+    {"name": "Low Fat Paneer (100g)", "alias": ["low fat paneer", "skimmed paneer"], "cal": 180, "p": 25.0, "c": 3.5, "f": 7.0, "fib": 0.0, "type": "Dinner", "notes": "HealthifyMe: 100g low fat paneer"},
+    {"name": "Boiled Egg (Whole / 1 large)", "alias": ["egg", "boiled egg", "1 egg", "anda", "whole egg"], "cal": 74, "p": 6.3, "c": 0.4, "f": 5.0, "fib": 0.0, "type": "Breakfast", "notes": "HealthifyMe: 1 large whole egg (50g)"},
+    {"name": "Egg White (1 large)", "alias": ["egg white", "egg whites", "white egg", "egg white 1"], "cal": 17, "p": 3.6, "c": 0.2, "f": 0.1, "fib": 0.0, "type": "Breakfast", "notes": "HealthifyMe: 1 egg white (33g)"},
+    {"name": "Egg Bhurji (2 eggs + onions/tomatoes)", "alias": ["egg bhurji", "anda bhurji", "scrambled egg"], "cal": 190, "p": 13.0, "c": 4.0, "f": 13.0, "fib": 1.0, "type": "Breakfast", "notes": "HealthifyMe: 2-egg Indian bhurji"},
+    {"name": "Chicken Breast (100g grilled/boiled)", "alias": ["chicken breast", "boiled chicken", "grilled chicken", "chicken 100g"], "cal": 165, "p": 31.0, "c": 0.0, "f": 3.6, "fib": 0.0, "type": "Lunch", "notes": "HealthifyMe: 100g skinless chicken breast"},
+    {"name": "Chicken Curry (150g / 1 bowl)", "alias": ["chicken curry", "murgh curry", "home chicken"], "cal": 240, "p": 22.0, "c": 5.0, "f": 14.0, "fib": 1.5, "type": "Dinner", "notes": "HealthifyMe: 1 bowl home-cooked chicken curry"},
+    {"name": "Moong Dal (1 bowl / 150g)", "alias": ["moong dal", "yellow dal", "mung dal"], "cal": 140, "p": 9.0, "c": 21.0, "f": 2.0, "fib": 4.5, "type": "Lunch", "notes": "HealthifyMe: 150g cooked yellow moong dal"},
+    {"name": "Dal Tadka (1 bowl / 150g)", "alias": ["dal tadka", "arhar dal", "toor dal", "dal fry"], "cal": 160, "p": 8.5, "c": 20.0, "f": 5.0, "fib": 4.0, "type": "Lunch", "notes": "HealthifyMe: 150g cooked toor dal with tadka"},
+    {"name": "Dal Makhani (1 bowl / 150g)", "alias": ["dal makhani", "maa ki dal"], "cal": 280, "p": 9.0, "c": 24.0, "f": 16.0, "fib": 6.0, "type": "Dinner", "notes": "HealthifyMe: 150g restaurant style dal makhani"},
+    {"name": "Curd / Dahi (150g / 1 bowl)", "alias": ["curd", "dahi", "yogurt", "plain curd"], "cal": 95, "p": 5.0, "c": 6.5, "f": 5.0, "fib": 0.0, "type": "Lunch", "notes": "HealthifyMe: 150g standard Indian curd"},
+    {"name": "White Rice (1 cup cooked / 150g)", "alias": ["rice", "white rice", "chawal", "steamed rice"], "cal": 195, "p": 4.0, "c": 44.0, "f": 0.4, "fib": 0.6, "type": "Lunch", "notes": "HealthifyMe: 150g cooked basmati rice"},
+    {"name": "Brown Rice (1 cup cooked / 150g)", "alias": ["brown rice"], "cal": 165, "p": 3.5, "c": 35.0, "f": 1.4, "fib": 2.8, "type": "Lunch", "notes": "HealthifyMe: 150g cooked brown rice"},
+    {"name": "Sweet Potato (150g boiled)", "alias": ["sweet potato", "shakarkandi", "sweet potatoes"], "cal": 135, "p": 3.0, "c": 31.0, "f": 0.2, "fib": 4.5, "type": "Breakfast", "notes": "HealthifyMe: 150g boiled sweet potato"},
+    {"name": "Whey Protein (1 scoop / 32g)", "alias": ["whey", "whey protein", "protein shake", "scoop whey", "1 scoop whey"], "cal": 120, "p": 24.0, "c": 2.5, "f": 1.5, "fib": 0.0, "type": "Snack", "notes": "HealthifyMe: 1 standard scoop 100% whey in water"},
+    {"name": "Oats with Milk / Water (40g oats)", "alias": ["oats", "oatmeal"], "cal": 180, "p": 6.5, "c": 32.0, "f": 3.5, "fib": 4.5, "type": "Breakfast", "notes": "HealthifyMe: 40g rolled oats cooked"},
+    {"name": "Poha (1 plate / 150g)", "alias": ["poha", "pohe"], "cal": 220, "p": 4.5, "c": 41.0, "f": 4.5, "fib": 2.0, "type": "Breakfast", "notes": "HealthifyMe: 1 plate kanda poha with peanuts"},
+    {"name": "Upma (1 plate / 150g)", "alias": ["upma"], "cal": 210, "p": 5.0, "c": 35.0, "f": 5.5, "fib": 2.5, "type": "Breakfast", "notes": "HealthifyMe: 1 plate rava upma"},
+    {"name": "Almonds (30g / ~23 nuts)", "alias": ["almonds", "badam"], "cal": 173, "p": 6.4, "c": 6.1, "f": 15.0, "fib": 3.5, "type": "Snack", "notes": "HealthifyMe: 30g raw/soaked almonds"},
+    {"name": "Walnuts (30g / ~14 halves)", "alias": ["walnuts", "akhrot"], "cal": 196, "p": 4.5, "c": 4.1, "f": 19.5, "fib": 2.0, "type": "Snack", "notes": "HealthifyMe: 30g walnuts"},
+    {"name": "Ghee (1 tbsp / 14g)", "alias": ["ghee", "deshi ghee", "cow ghee"], "cal": 125, "p": 0.0, "c": 0.0, "f": 14.0, "fib": 0.0, "type": "Lunch", "notes": "HealthifyMe: 1 tbsp pure cow/buffalo ghee"},
+    {"name": "Besan Chilla (1 piece)", "alias": ["besan chilla", "chilla", "cheela"], "cal": 150, "p": 7.0, "c": 20.0, "f": 4.5, "fib": 3.5, "type": "Breakfast", "notes": "HealthifyMe: 1 besan chilla with veggies"},
+    {"name": "Idli with Sambar (2 idlis + sambar)", "alias": ["idli", "idli sambar", "idlis"], "cal": 190, "p": 7.5, "c": 34.0, "f": 2.9, "fib": 4.0, "type": "Breakfast", "notes": "HealthifyMe: 2 steamed idlis with bowl of sambar"},
+    {"name": "Plain Dosa (1 piece)", "alias": ["dosa", "plain dosa", "sada dosa"], "cal": 135, "p": 3.5, "c": 24.0, "f": 2.5, "fib": 1.5, "type": "Breakfast", "notes": "HealthifyMe: 1 medium crisp plain dosa"}
+]
+
+def estimate_indian_food_macros(query: str, api_key: str = ""):
+    q = (query or "").strip().lower()
+    if not q:
+        return {"dish_name": "Indian Meal", "meal_type": "Lunch", "calories": 450, "protein": 20.0, "carbs": 50.0, "fat": 15.0, "fiber": 5.0, "notes": "HealthifyMe Standard Benchmark"}
+
+    # 1. Try Gemini API first if key is available
+    key = api_key or os.environ.get("GEMINI_API_KEY", "")
+    if key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
+            prompt = (
+                f"You are an expert Indian clinical nutritionist calibrated to HealthifyMe and National Institute of Nutrition (NIN) standards.\n"
+                f"The user entered this Indian meal or food description: '{query}'.\n"
+                f"Estimate exact portion sizes, total calories (kcal, integer), protein (g, float), carbs (g, float), fat (g, float), and fiber (g, float).\n"
+                f"Determine the most fitting meal_type: 'Breakfast', 'Lunch', 'Dinner', or 'Snack'.\n"
+                f"Respond ONLY with a JSON object in this exact schema without markdown:\n"
+                f"{{\"dish_name\": string, \"meal_type\": string, \"calories\": int, \"protein\": float, \"carbs\": float, \"fat\": float, \"fiber\": float, \"notes\": string, \"source\": \"HealthifyMe AI Engine\"}}"
+            )
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}
+            }
+            req = urllib.request.Request(
+                url, data=json.dumps(payload).encode('utf-8'),
+                headers={"Content-Type": "application/json"}, method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                res_body = response.read().decode('utf-8')
+                res_json = json.loads(res_body)
+                raw_text = res_json['candidates'][0]['content']['parts'][0]['text']
+                clean_text = re.sub(r'^```json\s*|\s*```$', '', raw_text.strip(), flags=re.MULTILINE)
+                data = json.loads(clean_text)
+                data['healthifyme_source'] = True
+                return data
+        except Exception as e:
+            print(f"[Gemini Food AI Warning]: {e}. Falling back to HealthifyMe Local Database.")
+
+    # 2. Local Database & Compound Multiplier Parser
+    mult = 1.0
+    num_match = re.search(r'^(\d+(?:\.\d+)?)\s*(?:pc|pcs|piece|pieces|plate|plates|bowl|bowls)?\s+', q)
+    if num_match:
+        mult = float(num_match.group(1))
+        q = q[num_match.end():].strip()
+
+    best_match = None
+    best_len = 0
+    for item in HEALTHIFYME_INDIAN_FOODS_DB:
+        for a in item['alias']:
+            if a == q:
+                best_match = item
+                best_len = 99999
+                break
+            elif a in q:
+                if len(a) > best_len:
+                    best_match = item
+                    best_len = len(a)
+            elif q in a:
+                if len(q) > best_len:
+                    best_match = item
+                    best_len = len(q)
+        if best_len == 99999:
+            break
+
+    if best_match:
+        return {
+            "dish_name": f"{int(mult) if mult.is_integer() else mult}x {best_match['name']}" if mult != 1.0 else best_match['name'],
+            "meal_type": best_match["type"],
+            "calories": int(round(best_match["cal"] * mult)),
+            "protein": round(best_match["p"] * mult, 1),
+            "carbs": round(best_match["c"] * mult, 1),
+            "fat": round(best_match["f"] * mult, 1),
+            "fiber": round(best_match["fib"] * mult, 1),
+            "notes": f"HealthifyMe Database: {best_match['notes']}" + (f" (scaled {mult}x)" if mult != 1.0 else ""),
+            "healthifyme_source": True
+        }
+
+    # Fallback heuristic for unrecognized Indian food
+    return {
+        "dish_name": query.title(),
+        "meal_type": "Snack" if "peanut" in q or "snack" in q or "tea" in q or "chai" in q else "Lunch",
+        "calories": 250,
+        "protein": 10.0,
+        "carbs": 30.0,
+        "fat": 9.0,
+        "fiber": 3.0,
+        "notes": f"HealthifyMe Heuristic Estimate for '{query}'",
+        "healthifyme_source": True
+    }
+
+# -------------------------------------------------------------
 # AI Daily Audit Engine (Dynamic & Real-Time)
 # -------------------------------------------------------------
 def calculate_daily_audit(user_id: int, target_date: str, conn):
@@ -784,6 +946,29 @@ def calculate_daily_audit(user_id: int, target_date: str, conn):
     prot_total = p_row['total'] or 0
     prot_done = p_row['done'] or 0
 
+    # Medical & Clinical Context (Active Illnesses, Prescriptions & Blood Tests)
+    c.execute('''
+        SELECT * FROM medical_logs 
+        WHERE user_id = ? AND log_type = 'illness' AND status = 'active'
+        AND start_date <= ? AND (end_date = '' OR end_date >= ?)
+    ''', (user_id, target_date, target_date))
+    active_illnesses = [dict(r) for r in c.fetchall()]
+
+    c.execute('''
+        SELECT * FROM medical_logs 
+        WHERE user_id = ? AND log_type IN ('medication', 'injection') AND status = 'active'
+        AND start_date <= ? AND (end_date = '' OR end_date >= ?)
+    ''', (user_id, target_date, target_date))
+    active_meds = [dict(r) for r in c.fetchall()]
+
+    c.execute('''
+        SELECT * FROM medical_logs
+        WHERE user_id = ? AND log_type = 'blood_test' AND start_date <= ?
+        ORDER BY start_date DESC LIMIT 1
+    ''', (user_id, target_date))
+    latest_blood = c.fetchone()
+    latest_blood = dict(latest_blood) if latest_blood else None
+
     # 1. Food Score (0 if nothing logged, otherwise proportional to daily target compliance)
     if food['count'] == 0 or food['cal'] == 0:
         food_score = 0
@@ -798,7 +983,10 @@ def calculate_daily_audit(user_id: int, target_date: str, conn):
     # 2. Exercise Score (0 if no workout and no burn/steps logged)
     has_workout = fit['count'] > 0 or wk_sess['count'] > 0
     if not has_workout and fit['burn'] == 0 and fit['steps'] == 0:
-        exercise_score = 0
+        if active_illnesses:
+            exercise_score = 85 # Active illness recovery: prescribed rest scored positively
+        else:
+            exercise_score = 0
     else:
         burn_target = max(1, targets.get('burn_target_kcal', 500))
         step_target = max(1, targets.get('step_target', 10000))
@@ -824,16 +1012,16 @@ def calculate_daily_audit(user_id: int, target_date: str, conn):
     if prot_total > 0 and prot_done > 0:
         recovery_score = int(round((prot_done / prot_total) * 100))
     else:
-        recovery_score = 0
+        recovery_score = 80 if active_illnesses else 0
 
     # 5. Overall Day Score
     # If no data at all is logged today, overall score is 0.
     # Otherwise, weighted by active categories.
     logged_components = []
     if food['count'] > 0: logged_components.append((food_score, 0.35))
-    if has_workout or fit['burn'] > 0 or fit['steps'] > 0: logged_components.append((exercise_score, 0.30))
+    if has_workout or fit['burn'] > 0 or fit['steps'] > 0 or active_illnesses: logged_components.append((exercise_score, 0.30))
     if sleep: logged_components.append((sleep_score, 0.20))
-    if prot_total > 0 and prot_done > 0: logged_components.append((recovery_score, 0.15))
+    if (prot_total > 0 and prot_done > 0) or active_illnesses: logged_components.append((recovery_score, 0.15))
 
     if not logged_components:
         overall_score = 0
@@ -852,17 +1040,27 @@ def calculate_daily_audit(user_id: int, target_date: str, conn):
     p_rem = max(0, targets.get('protein_target', 140) - food['p'])
     steps_rem = max(0, targets.get('step_target', 10000) - fit['steps'])
 
+    med_notice = ""
+    if active_illnesses:
+        med_notice = f"[Clinical Health: Active {active_illnesses[0]['title']} ({active_illnesses[0]['severity']} severity) — Recovery Protocol Active] "
+    elif active_meds:
+        med_notice = f"[Prescriptions: {len(active_meds)} active medication(s) / injections] "
+
     if not is_bedtime:
         # Daytime Guidance: Continuously guides how to make the remaining day better
         time_slot = "Morning Action Plan" if now_hour < 12 else ("Mid-Day Protocol Strategy" if now_hour < 17 else "Evening Execution Priority")
         summary_text = (
-            f"[{time_slot} — Live Telemetry]: Current Day Score is {overall_score}/100. "
+            f"{med_notice}[{time_slot} — Live Telemetry]: Current Day Score is {overall_score}/100. "
             f"Logged: {food['count']} meals ({food['cal']}/{targets.get('calorie_target', 2150)} kcal, {food['p']}g protein) · "
             f"{fit['count'] + wk_sess['count']} workout session(s) ({fit['burn']} kcal, {fit['steps']} steps, {wk_sess['vol']:,.0f} kg volume) · "
             f"Habits executed: {prot_done}/{prot_total}."
         )
 
         strengths_list = []
+        if active_illnesses:
+            strengths_list.append(f"Proper immune recovery priority for {active_illnesses[0]['title']}; refrained from counter-productive overexertion")
+        if active_meds:
+            strengths_list.append(f"Adhering to medical prescriptions ({len(active_meds)} active medication item(s))")
         if food['count'] > 0: strengths_list.append(f"{food['count']} planned meals tracked ({food['cal']} kcal, {food['p']}g protein)")
         if wk_sess['count'] > 0:
             hr_tag = f", Garmin HR peak {wk_sess['max_hr']} bpm" if wk_sess['max_hr'] else ""
@@ -875,14 +1073,16 @@ def calculate_daily_audit(user_id: int, target_date: str, conn):
         strengths = "; ".join(strengths_list)
 
         improvements_list = []
+        if active_illnesses:
+            improvements_list.append(f"Clinical Recovery Focus: Maintain 3.5-4L electrolyte hydration (ORS), light digestible nutrition, and adequate bed rest until {active_illnesses[0]['title']} resolves.")
         if food['count'] == 0:
             improvements_list.append("Log Meal 1 (3 whole eggs + 3 egg whites, sweet potato/carb, whey & coconut oil). Dilute 1 tbsp ACV 15m before.")
-        elif p_rem > 0:
+        elif p_rem > 0 and not active_illnesses:
             improvements_list.append(f"Need {p_rem}g more protein to hit your 140g target. Prioritize lean protein in next meal.")
             
-        if not has_workout:
+        if not has_workout and not active_illnesses:
             improvements_list.append("Workout pending: Hit today's assigned workout with 3 sets (15, 12, 10 reps) + 30-min cardio.")
-        elif steps_rem > 0:
+        elif steps_rem > 0 and not active_illnesses:
             improvements_list.append(f"Step deficit: {steps_rem:,} steps remaining to hit your 10,000 target. Take a brisk walk.")
             
         if prot_done < prot_total:
@@ -894,7 +1094,7 @@ def calculate_daily_audit(user_id: int, target_date: str, conn):
     else:
         # Bedtime & Day Finished: Review of day + What to improve NEXT DAY
         summary_text = (
-            f"[Day Completed & Bedtime Review]: Final score for {target_date} is {overall_score}/100. "
+            f"{med_notice}[Day Completed & Bedtime Review]: Final score for {target_date} is {overall_score}/100. "
             f"Total nutrition consumed: {food['cal']} kcal ({food['p']}g protein). "
             f"Physical exertion: {fit['burn']} kcal burned across {fit['steps']} steps. "
             f"Protocol adherence: {prot_done}/{prot_total} habits checked off."
@@ -947,7 +1147,12 @@ def calculate_daily_audit(user_id: int, target_date: str, conn):
         "recovery_score": recovery_score,
         "summary_text": summary_text,
         "strengths": strengths,
-        "improvements": improvements
+        "improvements": improvements,
+        "medical": {
+            "active_illnesses": active_illnesses,
+            "active_medications": active_meds,
+            "latest_blood_test": latest_blood
+        }
     }
 
 # -------------------------------------------------------------
@@ -1348,6 +1553,8 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             a_logs = [dict(r) for r in c.fetchall()]
             c.execute('SELECT * FROM workout_sessions WHERE user_id = ? ORDER BY session_date DESC', (client_id,))
             ws_logs = [dict(r) for r in c.fetchall()]
+            c.execute('SELECT * FROM medical_logs WHERE user_id = ? ORDER BY start_date DESC', (client_id,))
+            m_logs = [dict(r) for r in c.fetchall()]
             conn.close()
 
             return self.send_json({
@@ -1360,7 +1567,8 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "daily_protocols": p_logs,
                 "daily_journals": j_logs,
                 "daily_ai_audits": a_logs,
-                "workout_sessions": ws_logs
+                "workout_sessions": ws_logs,
+                "medical_logs": m_logs
             })
 
         # 3. Main Dashboard Aggregation
@@ -1539,6 +1747,17 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
         # 11. Weight Logs List
         if path == '/api/weight':
             c.execute('SELECT * FROM weight_logs WHERE user_id = ? ORDER BY logged_date DESC, id DESC', (user_id,))
+            rows = [dict(r) for r in c.fetchall()]
+            conn.close()
+            return self.send_json({"items": rows})
+
+        # 11b. Medical, Tablets, Injections, Illness & Blood Tests List
+        if path == '/api/medical':
+            log_type = query.get('type', [None])[0]
+            if log_type:
+                c.execute('SELECT * FROM medical_logs WHERE user_id = ? AND log_type = ? ORDER BY start_date DESC, id DESC', (user_id, log_type))
+            else:
+                c.execute('SELECT * FROM medical_logs WHERE user_id = ? ORDER BY start_date DESC, id DESC', (user_id,))
             rows = [dict(r) for r in c.fetchall()]
             conn.close()
             return self.send_json({"items": rows})
@@ -2439,6 +2658,65 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
             conn.close()
             return self.send_json({"message": "Daily targets customized and updated successfully!"})
 
+        # 20. AI Food Macro Estimator (HealthifyMe Calibrated Database + Gemini 1.5/2.0 Flash)
+        if path == '/api/food/ai-estimate':
+            query_text = body.get('query', '').strip()
+            if not query_text:
+                conn.close()
+                return self.send_json({"error": "Query cannot be empty."}, status=400)
+            user_api_key = user.get('gemini_api_key', '')
+            estimate = estimate_indian_food_macros(query_text, user_api_key)
+            conn.close()
+            return self.send_json({"success": True, "result": estimate})
+
+        # 21. Medical, Tablets, Injections, Illness & Blood Tests
+        if path == '/api/medical':
+            log_type = body.get('log_type', 'tablet').strip().lower()
+            title = body.get('title', '').strip()
+            if not title:
+                conn.close()
+                return self.send_json({"error": "Title / Medication name is required."}, status=400)
+            
+            dosage = body.get('dosage', '').strip()
+            frequency = body.get('frequency', '').strip()
+            timing = body.get('timing', '').strip()
+            severity = body.get('severity', '').strip()
+            status_val = body.get('status', 'active').strip()
+            start_date = body.get('start_date', today_str).strip()
+            end_date = body.get('end_date', '').strip()
+            lab_results = body.get('lab_results', '').strip()
+            doctor_name = body.get('doctor_name', '').strip()
+            notes = body.get('notes', '').strip()
+            image_url = body.get('image_url', '').strip()
+
+            c.execute('''
+                INSERT INTO medical_logs (
+                    user_id, log_type, title, dosage, frequency, timing, severity, status,
+                    start_date, end_date, lab_results, doctor_name, notes, image_url, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                user_id, log_type, title, dosage, frequency, timing, severity, status_val,
+                start_date, end_date, lab_results, doctor_name, notes, image_url, now_str
+            ))
+            conn.commit()
+            med_id = c.lastrowid
+            calculate_daily_audit(user_id, start_date, conn)
+            conn.close()
+            return self.send_json({"message": f"{log_type.title()} record logged successfully!", "id": med_id})
+
+        # 22. Toggle Medical / Illness Status
+        if path == '/api/medical/toggle':
+            item_id = body.get('id')
+            new_status = body.get('status', 'resolved')
+            c.execute('UPDATE medical_logs SET status = ? WHERE id = ? AND user_id = ?', (new_status, item_id, user_id))
+            conn.commit()
+            c.execute('SELECT start_date FROM medical_logs WHERE id = ?', (item_id,))
+            m_row = c.fetchone()
+            m_date = m_row['start_date'] if m_row else today_str
+            calculate_daily_audit(user_id, m_date, conn)
+            conn.close()
+            return self.send_json({"message": "Status updated successfully!", "status": new_status})
+
         conn.close()
         self.send_error(404, "Endpoint not found")
 
@@ -2471,7 +2749,8 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
                 'workout_plan': 'workout_plans',
                 'workout-plans': 'workout_plans',
                 'workout_session': 'workout_sessions',
-                'workout-sessions': 'workout_sessions'
+                'workout-sessions': 'workout_sessions',
+                'medical': 'medical_logs'
             }
             table = table_map.get(resource)
             if not table:
@@ -2479,7 +2758,7 @@ class FYNRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             conn = get_db()
             c = conn.cursor()
-            date_col = 'protocol_date' if resource == 'protocol' else ('session_date' if 'session' in resource else 'logged_date')
+            date_col = 'start_date' if resource == 'medical' else ('protocol_date' if resource == 'protocol' else ('session_date' if 'session' in resource else 'logged_date'))
             item_date = date.today().isoformat()
             try:
                 c.execute(f"SELECT {date_col} FROM {table} WHERE id = ? AND user_id = ?", (item_id, user_id))

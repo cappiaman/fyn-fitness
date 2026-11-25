@@ -42,6 +42,11 @@ class FYNApp {
     this.initRouter();
     this.initDragDrop();
     this.initPWAAndHaptics();
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.food-search-wrapper')) {
+        document.querySelectorAll('.food-suggestions-dropdown').forEach(el => el.classList.remove('active'));
+      }
+    });
     await this.checkAuth();
     this.resumeActiveHevySession();
     this.refreshIcons();
@@ -281,7 +286,7 @@ class FYNApp {
 
   navigate(viewName, evt = null, updateHash = true) {
     if (evt) evt.preventDefault();
-    const views = ['dashboard', 'protocol', 'food', 'fitness', 'sleep', 'weight', 'journal', 'report', 'ai-coach', 'targets'];
+    const views = ['dashboard', 'protocol', 'food', 'fitness', 'sleep', 'weight', 'journal', 'report', 'ai-coach', 'targets', 'medical'];
     if (!views.includes(viewName)) viewName = 'dashboard';
 
     this.currentView = viewName;
@@ -328,6 +333,8 @@ class FYNApp {
       this.loadAiAudit();
     } else if (viewName === 'targets') {
       this.loadTargetsDedicated();
+    } else if (viewName === 'medical') {
+      this.loadMedicalLogs();
     }
 
     this.refreshIcons();
@@ -1356,7 +1363,68 @@ class FYNApp {
       if (strEl) strEl.textContent = audit.strengths;
       if (impEl) impEl.textContent = audit.improvements;
 
-      this.renderAuditBreakdownTable();
+      // Render Clinical / Illness / Medical Banner in Daily Report
+      const bannerContainer = document.getElementById('reportMedicalBannerContainer');
+      if (bannerContainer) {
+        let bannerHtml = '';
+        const med = audit.medical || {};
+        let activeIll = (med.active_illnesses && med.active_illnesses[0]) || null;
+        let activeMeds = med.active_medications || [];
+
+        // If not populated from audit, fetch from /api/medical
+        if (!activeIll && activeMeds.length === 0) {
+          try {
+            const mRes = await this.apiFetch('/api/medical');
+            const items = mRes.items || [];
+            activeIll = items.find(m => m.log_type === 'illness' && (m.status === 'active' || !m.end_date || m.end_date >= this.selectedDate) && m.start_date <= this.selectedDate) || null;
+            activeMeds = items.filter(m => (m.log_type === 'tablet' || m.log_type === 'injection' || m.log_type === 'medication') && m.status === 'active' && m.start_date <= this.selectedDate && (!m.end_date || m.end_date >= this.selectedDate));
+          } catch (e) {}
+        }
+
+        if (activeIll) {
+          bannerHtml += `
+            <div class="illness-alert-banner" style="margin-bottom: 1.5rem;">
+              <div style="display: flex; gap: 0.85rem; align-items: flex-start;">
+                <i data-lucide="shield-alert" style="width: 26px; height: 26px; color: #ef4444; flex-shrink: 0; margin-top: 2px;"></i>
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <span style="font-weight: 800; font-size: 0.96rem; color: #ef4444; text-transform: uppercase;">Active Sickness Episode: ${activeIll.title}</span>
+                    <span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700;">${activeIll.severity || 'Moderate'} Severity</span>
+                    <span style="background: var(--bg-surface); color: var(--text-muted); padding: 2px 8px; border-radius: 4px; font-size: 0.72rem;">Since ${activeIll.start_date}</span>
+                  </div>
+                  <div style="font-size: 0.84rem; color: var(--text-secondary); margin-top: 0.4rem; line-height: 1.45;">
+                    ${activeIll.notes || 'Training intensity adjusted to protect immune recovery. Ensure strict hydration & adherence to prescribed medications.'}
+                  </div>
+                  <div style="font-size: 0.75rem; color: #10b981; font-weight: 600; margin-top: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+                    <i data-lucide="check-circle" style="width: 13px; height: 13px;"></i>
+                    <span>Clinical Rest Protected: Workout score is safeguarded (minimum 85 marks awarded) so your overall day score isn't penalized for resting.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        if (activeMeds && activeMeds.length > 0) {
+          bannerHtml += `
+            <div style="padding: 0.85rem 1.15rem; background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: var(--gold-dark); text-transform: uppercase; display: inline-flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="pill" style="width: 14px; height: 14px;"></i>
+                Prescribed Medical Protocol (${activeMeds.length} Active):
+              </span>
+              ${activeMeds.map(m => `
+                <span class="med-type-pill pill-${m.log_type || 'tablet'}" style="font-size: 0.74rem; padding: 3px 10px;">
+                  ${m.title} ${m.dosage ? `(${m.dosage})` : ''} · ${m.timing || 'Daily'}
+                </span>
+              `).join('')}
+            </div>
+          `;
+        }
+
+        bannerContainer.innerHTML = bannerHtml;
+      }
+
+      this.renderAuditBreakdownTable(audit);
     } catch (err) {
       console.error('Failed to load AI Audit:', err);
     }
@@ -1377,7 +1445,7 @@ class FYNApp {
     }
   }
 
-  async renderAuditBreakdownTable() {
+  async renderAuditBreakdownTable(auditData = null) {
     const container = document.getElementById('auditBreakdownTable');
     if (!container) return;
 
@@ -1387,6 +1455,38 @@ class FYNApp {
       const fit = data.fitness || {};
       const s = data.sleep || {};
       const w = data.weight || {};
+
+      // Fetch latest medical details
+      let medDetails = auditData?.medical || null;
+      if (!medDetails) {
+        try {
+          const mRes = await this.apiFetch('/api/medical');
+          const allMeds = mRes.items || [];
+          medDetails = {
+            active_illnesses: allMeds.filter(m => m.log_type === 'illness' && (m.status === 'active' || !m.end_date || m.end_date >= this.selectedDate) && m.start_date <= this.selectedDate),
+            active_medications: allMeds.filter(m => (m.log_type === 'tablet' || m.log_type === 'injection' || m.log_type === 'medication') && m.status === 'active'),
+            latest_blood_test: allMeds.find(m => m.log_type === 'blood_test' && m.start_date <= this.selectedDate) || null
+          };
+        } catch (e) {}
+      }
+
+      const activeIllnesses = medDetails?.active_illnesses || [];
+      const activeMeds = medDetails?.active_medications || [];
+      const latestBlood = medDetails?.latest_blood_test || null;
+
+      let medHeadline = 'Baseline Healthy';
+      let medSub = 'No active illness or acute medications reported';
+
+      if (activeIllnesses.length > 0) {
+        medHeadline = `Active: ${activeIllnesses[0].title}`;
+        medSub = `${activeIllnesses[0].severity || 'Moderate'} severity · Rest & electrolyte hydration protocol`;
+      } else if (activeMeds.length > 0) {
+        medHeadline = `${activeMeds.length} Active Prescription(s)`;
+        medSub = activeMeds.map(m => m.title).slice(0, 2).join(', ');
+      } else if (latestBlood) {
+        medHeadline = `Latest Blood Test: ${latestBlood.start_date}`;
+        medSub = latestBlood.title;
+      }
 
       container.innerHTML = `
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem;">
@@ -1419,6 +1519,14 @@ class FYNApp {
             <div style="font-size: 1.15rem; font-weight: 700; margin-top: 0.25rem;">${w ? (w.weight_kg + ' kg') : 'Not logged'}</div>
             <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem;">
               ${w ? `Body Fat: ${w.body_fat_pct}% • Muscle: ${w.muscle_mass_kg} kg • BMI: ${w.bmi}` : 'Sync scale screenshot'}
+            </div>
+          </div>
+
+          <div style="padding: 1rem; background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: var(--radius-md);">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">5. Clinical & Medical Protocol</div>
+            <div style="font-size: 1.15rem; font-weight: 700; margin-top: 0.25rem; color: ${activeIllnesses.length > 0 ? '#ef4444' : 'var(--text-primary)'};">${medHeadline}</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem;">
+              ${medSub}
             </div>
           </div>
         </div>
@@ -2111,6 +2219,26 @@ class FYNApp {
         })) : [{ "Notice": "No journal entries recorded yet" }];
         const wsJournals = window.XLSX.utils.json_to_sheet(journalSheetData);
         window.XLSX.utils.book_append_sheet(wb, wsJournals, "Daily Journals");
+
+        // 10. Medical & Blood Tests Sheet
+        const medLogs = res.medical_logs || [];
+        const medSheetData = medLogs.length > 0 ? medLogs.map(m => ({
+          "Log Type": (m.log_type || "Medication").toUpperCase(),
+          "Title / Condition": m.title || "",
+          "Dosage": m.dosage || "",
+          "Frequency": m.frequency || "",
+          "Timing": m.timing || "",
+          "Severity": m.severity || "",
+          "Status": m.status || "active",
+          "Start Date": m.start_date || "",
+          "End / Resolved Date": m.end_date || "",
+          "Lab Results / Biomarkers": m.lab_results || "",
+          "Doctor / Lab Clinic": m.doctor_name || "",
+          "Notes / Protocols": m.notes || "",
+          "Recorded At": m.created_at || ""
+        })) : [{ "Notice": "No medical or blood test records logged" }];
+        const wsMeds = window.XLSX.utils.json_to_sheet(medSheetData);
+        window.XLSX.utils.book_append_sheet(wb, wsMeds, "Medical & Blood Tests");
 
         // Save workbook
         window.XLSX.writeFile(wb, filename);
@@ -3809,6 +3937,7 @@ class FYNApp {
   async submitQuickFood(e) {
     e.preventDefault();
     const timeEl = document.getElementById('qFoodTime');
+    const fatEl = document.getElementById('qFoodFat');
     const payload = {
       dish_name: document.getElementById('qFoodName').value,
       meal_type: document.getElementById('qFoodType').value,
@@ -3816,7 +3945,7 @@ class FYNApp {
       calories: parseInt(document.getElementById('qFoodCalories').value || 0),
       protein: parseFloat(document.getElementById('qFoodProtein').value || 0),
       carbs: parseFloat(document.getElementById('qFoodCarbs').value || 0),
-      fat: 0,
+      fat: parseFloat(fatEl ? fatEl.value || 0 : 0),
       logged_date: this.selectedDate
     };
     try {
@@ -5547,9 +5676,722 @@ class FYNApp {
     }
   }
 
-  // -------------------------------------------------------------
-  // TOAST NOTIFICATIONS
-  // -------------------------------------------------------------
+  // =============================================================
+  // HEALTHIFYME-CALIBRATED INDIAN FOOD SEARCH & AI MACRO ENGINE
+  // =============================================================
+  getHealthifyMeDatabase() {
+    return [
+      { name: "Salted Peanuts (30g)", alias: ["salted peanuts", "peanuts salted", "namkeen peanuts", "peanuts", "salted peanut"], cal: 170, p: 8.0, c: 5.0, f: 14.0, fib: 2.5, type: "Snack", notes: "HealthifyMe Verified: 30g salted crunchy peanuts" },
+      { name: "Salted Peanuts (100g)", alias: ["salted peanuts 100g", "100g peanuts", "peanuts 100g", "100g salted peanuts"], cal: 567, p: 26.0, c: 16.0, f: 49.0, fib: 8.5, type: "Snack", notes: "HealthifyMe Verified: 100g salted peanuts" },
+      { name: "Roasted Peanuts (plain / 30g)", alias: ["roasted peanuts", "bhuna peanuts", "mungfali", "singdana"], cal: 166, p: 7.8, c: 4.8, f: 14.0, fib: 2.6, type: "Snack", notes: "HealthifyMe: 30g dry roasted peanuts" },
+      { name: "Roti / Phulka (1 piece)", alias: ["roti", "chapati", "phulka", "fulka", "chapatti"], cal: 85, p: 3.0, c: 18.0, f: 0.4, fib: 2.2, type: "Lunch", notes: "HealthifyMe: 1 wheat roti (30g dough, no ghee)" },
+      { name: "Butter / Ghee Roti (1 piece)", alias: ["ghee roti", "butter roti"], cal: 110, p: 3.0, c: 18.0, f: 3.0, fib: 2.2, type: "Lunch", notes: "HealthifyMe: 1 wheat roti with 1/2 tsp ghee" },
+      { name: "Paneer (raw, 100g)", alias: ["paneer", "cottage cheese", "paneer 100g", "raw paneer"], cal: 265, p: 18.3, c: 3.0, f: 20.8, fib: 0.0, type: "Dinner", notes: "HealthifyMe: 100g full-fat fresh paneer" },
+      { name: "Low Fat Paneer (100g)", alias: ["low fat paneer", "skimmed paneer"], cal: 180, p: 25.0, c: 3.5, f: 7.0, fib: 0.0, type: "Dinner", notes: "HealthifyMe: 100g low fat paneer" },
+      { name: "Boiled Egg (Whole / 1 large)", alias: ["egg", "boiled egg", "1 egg", "anda", "whole egg"], cal: 74, p: 6.3, c: 0.4, f: 5.0, fib: 0.0, type: "Breakfast", notes: "HealthifyMe: 1 large whole egg (50g)" },
+      { name: "Egg White (1 large)", alias: ["egg white", "egg whites", "white egg", "egg white 1"], cal: 17, p: 3.6, c: 0.2, f: 0.1, fib: 0.0, type: "Breakfast", notes: "HealthifyMe: 1 egg white (33g)" },
+      { name: "Egg Bhurji (2 eggs + onions/tomatoes)", alias: ["egg bhurji", "anda bhurji", "scrambled egg"], cal: 190, p: 13.0, c: 4.0, f: 13.0, fib: 1.0, type: "Breakfast", notes: "HealthifyMe: 2-egg Indian bhurji" },
+      { name: "Chicken Breast (100g grilled/boiled)", alias: ["chicken breast", "boiled chicken", "grilled chicken", "chicken 100g"], cal: 165, p: 31.0, c: 0.0, f: 3.6, fib: 0.0, type: "Lunch", notes: "HealthifyMe: 100g skinless chicken breast" },
+      { name: "Chicken Curry (150g / 1 bowl)", alias: ["chicken curry", "murgh curry", "home chicken"], cal: 240, p: 22.0, c: 5.0, f: 14.0, fib: 1.5, type: "Dinner", notes: "HealthifyMe: 1 bowl home-cooked chicken curry" },
+      { name: "Mutton Curry (150g / 1 bowl)", alias: ["mutton curry", "mutton", "gosht"], cal: 320, p: 24.0, c: 4.0, f: 22.0, fib: 1.0, type: "Dinner", notes: "HealthifyMe: 1 bowl homestyle mutton curry" },
+      { name: "Yellow Dal / Dal Tadka (150g / 1 katori)", alias: ["dal tadka", "yellow dal", "arhar dal", "toor dal", "moong dal", "dal"], cal: 150, p: 8.0, c: 22.0, f: 4.0, fib: 5.0, type: "Lunch", notes: "HealthifyMe: 1 katori cooked dal tadka" },
+      { name: "Dal Makhani (150g / 1 bowl)", alias: ["dal makhani", "makhani dal", "urad dal"], cal: 260, p: 9.0, c: 26.0, f: 14.0, fib: 6.0, type: "Dinner", notes: "HealthifyMe: 1 katori dal makhani with butter" },
+      { name: "Rajma Masala (150g / 1 bowl)", alias: ["rajma", "kidney beans", "rajma curry", "rajma chawal"], cal: 220, p: 12.0, c: 32.0, f: 5.0, fib: 9.0, type: "Lunch", notes: "HealthifyMe: 1 bowl Punjabi rajma" },
+      { name: "Chana Masala / Chole (150g / 1 bowl)", alias: ["chana masala", "chole", "chickpeas", "safed chana"], cal: 240, p: 11.0, c: 35.0, f: 6.0, fib: 8.0, type: "Lunch", notes: "HealthifyMe: 1 bowl chana masala" },
+      { name: "Cooked White Rice (150g / 1 bowl)", alias: ["rice", "white rice", "steamed rice", "boiled rice", "chawal"], cal: 195, p: 4.0, c: 42.0, f: 0.5, fib: 0.6, type: "Lunch", notes: "HealthifyMe: 1 medium katori cooked white rice" },
+      { name: "Cooked Brown Rice (150g / 1 bowl)", alias: ["brown rice"], cal: 165, p: 3.5, c: 34.0, f: 1.2, fib: 2.5, type: "Lunch", notes: "HealthifyMe: 1 medium katori cooked brown rice" },
+      { name: "Curd / Dahi (100g)", alias: ["curd", "dahi", "yogurt", "plain curd"], cal: 60, p: 3.5, c: 4.5, f: 3.0, fib: 0.0, type: "Snack", notes: "HealthifyMe: 100g home-set whole milk curd" },
+      { name: "Greek Yogurt (100g)", alias: ["greek yogurt", "epigamia"], cal: 97, p: 10.0, c: 4.0, f: 4.5, fib: 0.0, type: "Snack", notes: "HealthifyMe: 100g Greek yogurt" },
+      { name: "Whey Protein (1 scoop / 30g)", alias: ["whey protein", "whey", "protein shake", "isolate"], cal: 120, p: 24.0, c: 2.0, f: 1.5, fib: 0.5, type: "Snack", notes: "HealthifyMe: 1 scoop 100% whey protein" },
+      { name: "Poha (1 medium plate / 150g)", alias: ["poha", "flattened rice"], cal: 250, p: 4.5, c: 45.0, f: 6.0, fib: 2.5, type: "Breakfast", notes: "HealthifyMe: 1 plate kanda poha with peanuts" },
+      { name: "Upma (1 plate / 150g)", alias: ["upma", "rava upma"], cal: 220, p: 5.0, c: 38.0, f: 6.0, fib: 2.8, type: "Breakfast", notes: "HealthifyMe: 1 plate suji upma" },
+      { name: "Besan Chilla (1 piece)", alias: ["besan chilla", "chilla", "cheela"], cal: 135, p: 6.5, c: 16.0, f: 5.0, fib: 3.0, type: "Breakfast", notes: "HealthifyMe: 1 besan chilla with veggies" },
+      { name: "Moong Dal Khichdi (200g / 1 bowl)", alias: ["khichdi", "dal khichdi", "moong khichdi"], cal: 210, p: 7.0, c: 35.0, f: 4.0, fib: 3.5, type: "Dinner", notes: "HealthifyMe: 1 bowl comforting moong dal khichdi" },
+      { name: "Oats with Water (40g dry)", alias: ["oats", "oatmeal", "plain oats"], cal: 150, p: 5.0, c: 27.0, f: 3.0, fib: 4.0, type: "Breakfast", notes: "HealthifyMe: 40g rolled oats in water" },
+      { name: "Oats with Milk (40g dry + 150ml milk)", alias: ["oats with milk", "milk oats"], cal: 250, p: 10.0, c: 38.0, f: 6.5, fib: 4.0, type: "Breakfast", notes: "HealthifyMe: 40g oats cooked with low fat milk" },
+      { name: "Almonds / Badam (10 pieces / 12g)", alias: ["almonds", "badam"], cal: 70, p: 2.5, c: 2.5, f: 6.0, fib: 1.5, type: "Snack", notes: "HealthifyMe: 10 raw almonds" },
+      { name: "Walnuts / Akhrot (4 halves / 12g)", alias: ["walnuts", "akhrot"], cal: 80, p: 1.8, c: 1.5, f: 8.0, fib: 0.8, type: "Snack", notes: "HealthifyMe: 4 walnut halves" },
+      { name: "Apple (1 medium / 150g)", alias: ["apple", "seb"], cal: 78, p: 0.4, c: 20.0, f: 0.2, fib: 3.5, type: "Snack", notes: "HealthifyMe: 1 medium crisp apple" },
+      { name: "Banana (1 medium / 100g)", alias: ["banana", "kela"], cal: 89, p: 1.1, c: 23.0, f: 0.3, fib: 2.6, type: "Snack", notes: "HealthifyMe: 1 medium banana" },
+      { name: "Sweet Potato Boiled (100g)", alias: ["sweet potato", "shakarkandi"], cal: 86, p: 1.6, c: 20.0, f: 0.1, fib: 3.0, type: "Breakfast", notes: "HealthifyMe: 100g boiled sweet potato" },
+      { name: "Soya Chunks (50g raw)", alias: ["soya chunks", "soy chunks", "nutrela"], cal: 170, p: 26.0, c: 16.0, f: 0.5, fib: 6.5, type: "Lunch", notes: "HealthifyMe: 50g raw soya chunks" },
+      { name: "Idli (2 pieces with sambar)", alias: ["idli", "idlis"], cal: 160, p: 5.0, c: 32.0, f: 1.5, fib: 2.5, type: "Breakfast", notes: "HealthifyMe: 2 steamed rice idlis with sambar" },
+      { name: "Plain Dosa (1 piece)", alias: ["plain dosa", "dosa"], cal: 135, p: 3.0, c: 22.0, f: 4.0, fib: 1.2, type: "Breakfast", notes: "HealthifyMe: 1 crisp plain dosa" },
+      { name: "Masala Dosa (1 piece)", alias: ["masala dosa"], cal: 250, p: 5.0, c: 38.0, f: 9.0, fib: 3.0, type: "Breakfast", notes: "HealthifyMe: 1 masala dosa with potato filling" }
+    ];
+  }
+
+  onFoodSearchInput(query, context = 'quick') {
+    const dropdown = document.getElementById(context === 'quick' ? 'qFoodSuggestions' : 'mainFoodSuggestions');
+    if (!dropdown) return;
+
+    const q = (query || '').trim().toLowerCase();
+    if (!q || q.length < 2) {
+      dropdown.classList.remove('active');
+      dropdown.innerHTML = '';
+      return;
+    }
+
+    const db = this.getHealthifyMeDatabase();
+    const matches = db.filter(item => {
+      if (item.name.toLowerCase().includes(q)) return true;
+      return item.alias.some(a => a.toLowerCase().includes(q));
+    }).slice(0, 6);
+
+    if (matches.length === 0) {
+      dropdown.classList.remove('active');
+      dropdown.innerHTML = '';
+      return;
+    }
+
+    dropdown.innerHTML = matches.map(item => `
+      <div class="food-suggestion-item" onclick="app.selectFoodSuggestion('${item.name.replace(/'/g, "\\'")}', '${context}')">
+        <div>
+          <div class="food-suggestion-name">${item.name}</div>
+          <div class="food-suggestion-notes">${item.notes || 'HealthifyMe Calibrated'}</div>
+        </div>
+        <div class="food-suggestion-macros">
+          <span style="font-weight: 700; color: var(--gold-dark);">${item.cal} kcal</span>
+          <span>P: ${item.p}g • C: ${item.c}g • F: ${item.f}g</span>
+        </div>
+      </div>
+    `).join('');
+
+    dropdown.classList.add('active');
+  }
+
+  selectFoodSuggestion(foodName, context = 'quick') {
+    const db = this.getHealthifyMeDatabase();
+    const item = db.find(x => x.name === foodName);
+    if (!item) return;
+
+    if (context === 'quick') {
+      const nameInput = document.getElementById('qFoodName');
+      const calInput = document.getElementById('qFoodCalories');
+      const pInput = document.getElementById('qFoodProtein');
+      const cInput = document.getElementById('qFoodCarbs');
+      const fInput = document.getElementById('qFoodFat');
+      const typeSelect = document.getElementById('qFoodType');
+      const noteEl = document.getElementById('qFoodAiResultNote');
+
+      if (nameInput) nameInput.value = item.name;
+      if (calInput) calInput.value = item.cal;
+      if (pInput) pInput.value = item.p;
+      if (cInput) cInput.value = item.c;
+      if (fInput) fInput.value = item.f;
+      if (typeSelect && item.type) typeSelect.value = item.type;
+
+      if (noteEl) {
+        noteEl.textContent = `✓ HealthifyMe Auto-Filled: ${item.cal} kcal | ${item.p}g P | ${item.c}g C | ${item.f}g F (${item.notes})`;
+        noteEl.style.display = 'block';
+      }
+
+      const dropdown = document.getElementById('qFoodSuggestions');
+      if (dropdown) dropdown.classList.remove('active');
+    } else {
+      const nameInput = document.getElementById('foodDishName');
+      const calInput = document.getElementById('foodCalories');
+      const pInput = document.getElementById('foodProtein');
+      const cInput = document.getElementById('foodCarbs');
+      const fInput = document.getElementById('foodFat');
+      const fibInput = document.getElementById('foodFiber');
+      const typeSelect = document.getElementById('foodMealType');
+      const noteEl = document.getElementById('mainFoodAiResultNote');
+
+      if (nameInput) nameInput.value = item.name;
+      if (calInput) calInput.value = item.cal;
+      if (pInput) pInput.value = item.p;
+      if (cInput) cInput.value = item.c;
+      if (fInput) fInput.value = item.f;
+      if (fibInput) fibInput.value = item.fib || 0;
+      if (typeSelect && item.type) typeSelect.value = item.type;
+
+      if (noteEl) {
+        noteEl.textContent = `✓ HealthifyMe Auto-Filled: ${item.cal} kcal | ${item.p}g P | ${item.c}g C | ${item.f}g F (${item.notes})`;
+        noteEl.style.display = 'block';
+      }
+
+      const dropdown = document.getElementById('mainFoodSuggestions');
+      if (dropdown) dropdown.classList.remove('active');
+    }
+
+    this.showToast(`Macros loaded for ${item.name}!`);
+  }
+
+  async estimateFoodWithAI(context = 'quick') {
+    const inputEl = document.getElementById(context === 'quick' ? 'qFoodName' : 'foodDishName');
+    const query = inputEl ? inputEl.value.trim() : '';
+
+    if (!query) {
+      alert("Please type a meal or dish name first (e.g. 'salted peanuts', '2 roti with dal', 'paneer').");
+      return;
+    }
+
+    this.showToast('Querying HealthifyMe Indian Food AI database...');
+
+    try {
+      const res = await this.apiFetch('/api/food/ai-estimate', {
+        method: 'POST',
+        body: { query }
+      });
+
+      const r = res.result;
+      if (!r) throw new Error('No estimate returned');
+
+      if (context === 'quick') {
+        const calInput = document.getElementById('qFoodCalories');
+        const pInput = document.getElementById('qFoodProtein');
+        const cInput = document.getElementById('qFoodCarbs');
+        const fInput = document.getElementById('qFoodFat');
+        const typeSelect = document.getElementById('qFoodType');
+        const noteEl = document.getElementById('qFoodAiResultNote');
+
+        if (calInput) calInput.value = r.calories || 0;
+        if (pInput) pInput.value = r.protein || 0;
+        if (cInput) cInput.value = r.carbs || 0;
+        if (fInput) fInput.value = r.fat || 0;
+        if (typeSelect && r.meal_type) typeSelect.value = r.meal_type;
+
+        if (noteEl) {
+          noteEl.textContent = `✓ HealthifyMe AI Auto-Complete: ${r.calories} kcal | ${r.protein}g Protein | ${r.carbs}g Carbs | ${r.fat}g Fat (${r.source || 'Verified'})`;
+          noteEl.style.display = 'block';
+        }
+
+        const dropdown = document.getElementById('qFoodSuggestions');
+        if (dropdown) dropdown.classList.remove('active');
+      } else {
+        const calInput = document.getElementById('foodCalories');
+        const pInput = document.getElementById('foodProtein');
+        const cInput = document.getElementById('foodCarbs');
+        const fInput = document.getElementById('foodFat');
+        const fibInput = document.getElementById('foodFiber');
+        const typeSelect = document.getElementById('foodMealType');
+        const noteEl = document.getElementById('mainFoodAiResultNote');
+
+        if (calInput) calInput.value = r.calories || 0;
+        if (pInput) pInput.value = r.protein || 0;
+        if (cInput) cInput.value = r.carbs || 0;
+        if (fInput) fInput.value = r.fat || 0;
+        if (fibInput) fibInput.value = r.fiber || 0;
+        if (typeSelect && r.meal_type) typeSelect.value = r.meal_type;
+
+        if (noteEl) {
+          noteEl.textContent = `✓ HealthifyMe AI Auto-Complete: ${r.calories} kcal | ${r.protein}g Protein | ${r.carbs}g Carbs | ${r.fat}g Fat (${r.source || 'Verified'})`;
+          noteEl.style.display = 'block';
+        }
+
+        const dropdown = document.getElementById('mainFoodSuggestions');
+        if (dropdown) dropdown.classList.remove('active');
+      }
+
+      this.showToast(`AI Auto-Fill Applied: ${r.calories} kcal, ${r.protein}g protein!`);
+    } catch (e) {
+      alert('AI Macro Estimation Error: ' + e.message);
+    }
+  }
+
+  // =============================================================
+  // MEDICAL, TABLETS, INJECTIONS, ILLNESS & BLOOD TESTS CONTROLLER
+  // =============================================================
+  switchMedicalTab(tabName) {
+    ['prescriptions', 'illness', 'blood'].forEach(t => {
+      const btn = document.getElementById(`medTabBtn-${t}`);
+      const pane = document.getElementById(`medSubtab-${t}`);
+      if (btn) {
+        if (t === tabName) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+      if (pane) {
+        pane.style.display = (t === tabName) ? 'block' : 'none';
+      }
+    });
+    this.refreshIcons();
+  }
+
+  async loadMedicalLogs() {
+    try {
+      const res = await this.apiFetch('/api/medical');
+      const items = res.items || [];
+
+      const activeMeds = items.filter(m => (m.log_type === 'tablet' || m.log_type === 'injection' || m.log_type === 'medication') && m.status === 'active');
+      const activeIllnesses = items.filter(m => m.log_type === 'illness' && m.status === 'active');
+      const bloodTests = items.filter(m => m.log_type === 'blood_test');
+
+      // Update KPI Header Cards
+      const countEl = document.getElementById('medMetricActiveCount');
+      const healthEl = document.getElementById('medMetricHealthStatus');
+      const bloodDateEl = document.getElementById('medMetricLastTestDate');
+      const trainStatusEl = document.getElementById('medMetricTrainingStatus');
+
+      if (countEl) countEl.textContent = activeMeds.length;
+      if (healthEl) {
+        if (activeIllnesses.length > 0) {
+          healthEl.textContent = `Recovering: ${activeIllnesses[0].title}`;
+          healthEl.style.color = '#ef4444';
+        } else {
+          healthEl.textContent = 'Baseline Healthy';
+          healthEl.style.color = '#10b981';
+        }
+      }
+
+      if (bloodDateEl) {
+        if (bloodTests.length > 0) {
+          bloodDateEl.textContent = bloodTests[0].start_date || 'Logged';
+        } else {
+          bloodDateEl.textContent = 'No records';
+        }
+      }
+
+      if (trainStatusEl) {
+        if (activeIllnesses.length > 0) {
+          trainStatusEl.textContent = 'Bed Rest Advised';
+          trainStatusEl.style.color = '#f59e0b';
+        } else {
+          trainStatusEl.textContent = 'Active Training';
+          trainStatusEl.style.color = 'var(--text-primary)';
+        }
+      }
+
+      // 1. Render Prescriptions (Tablets & Injections)
+      const medsContainer = document.getElementById('medicationsListContainer');
+      if (medsContainer) {
+        const medItems = items.filter(m => m.log_type === 'tablet' || m.log_type === 'injection' || m.log_type === 'medication' || m.log_type === 'syrup');
+        if (medItems.length === 0) {
+          medsContainer.innerHTML = `<div class="empty-state" style="padding: 2rem 1rem;"><i data-lucide="pill" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.5rem;"></i><p>No tablets or injections logged yet.</p></div>`;
+        } else {
+          medsContainer.innerHTML = medItems.map(m => `
+            <div class="medical-card ${m.status === 'active' ? 'active-regimen' : ''}">
+              <div class="medical-card-header">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <span class="medical-card-title">${m.title}</span>
+                    <span class="med-type-pill pill-${m.log_type || 'tablet'}">${(m.log_type || 'tablet').toUpperCase()}</span>
+                    <span style="font-size: 0.72rem; font-weight: 700; color: ${m.status === 'active' ? '#10b981' : 'var(--text-muted)'}; background: var(--bg-surface); padding: 2px 8px; border-radius: 4px;">
+                      ${m.status === 'active' ? '● ACTIVE REGIMEN' : 'RESOLVED / STOPPED'}
+                    </span>
+                  </div>
+                  <div class="medical-card-meta">
+                    <span><strong>Dosage:</strong> ${m.dosage || 'Standard'}</span> • 
+                    <span><strong>Frequency:</strong> ${m.frequency || 'Daily'}</span> • 
+                    <span><strong>Timing:</strong> ${m.timing || 'With meals'}</span>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 0.35rem; align-items: center;">
+                  <button class="btn-secondary" onclick="app.toggleMedicalStatus(${m.id}, '${m.status === 'active' ? 'resolved' : 'active'}')" style="padding: 0.3rem 0.6rem; font-size: 0.74rem;">
+                    ${m.status === 'active' ? 'Mark Completed' : 'Reactivate'}
+                  </button>
+                  <button class="btn-secondary" onclick="app.deleteMedicalLog(${m.id})" style="padding: 0.3rem 0.5rem; font-size: 0.74rem; color: #ef4444;" title="Delete Record">
+                    <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                  </button>
+                </div>
+              </div>
+              ${m.notes ? `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; background: var(--bg-surface); padding: 0.5rem 0.75rem; border-radius: 4px;">${m.notes}</div>` : ''}
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.4rem;">
+                Started: ${m.start_date} ${m.end_date ? `• Until: ${m.end_date}` : ''}
+              </div>
+            </div>
+          `).join('');
+        }
+      }
+
+      // 2. Render Illness & Sickness Episodes
+      const illnessContainer = document.getElementById('illnessListContainer');
+      if (illnessContainer) {
+        const illItems = items.filter(m => m.log_type === 'illness');
+        if (illItems.length === 0) {
+          illnessContainer.innerHTML = `<div class="empty-state" style="padding: 2rem 1rem;"><i data-lucide="shield-check" style="width: 32px; height: 32px; color: #10b981; margin-bottom: 0.5rem;"></i><p>No illness episodes recorded. Client is in optimal physiological health.</p></div>`;
+        } else {
+          illnessContainer.innerHTML = illItems.map(ill => `
+            <div class="medical-card ${ill.status === 'active' ? 'active-regimen' : ''}" style="${ill.status === 'active' ? 'border-left: 3px solid #ef4444;' : ''}">
+              <div class="medical-card-header">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <span class="medical-card-title" style="color: ${ill.status === 'active' ? '#ef4444' : 'var(--text-primary)'};">${ill.title}</span>
+                    <span class="med-type-pill pill-illness">${ill.severity || 'Moderate'} Severity</span>
+                    <span style="font-size: 0.72rem; font-weight: 700; color: ${ill.status === 'active' ? '#ef4444' : '#10b981'}; background: var(--bg-surface); padding: 2px 8px; border-radius: 4px;">
+                      ${ill.status === 'active' ? '● ONGOING EPISODE (REST ACTIVE)' : '✓ FULLY RECOVERED'}
+                    </span>
+                  </div>
+                  <div class="medical-card-meta">
+                    <span><strong>Episode Began:</strong> ${ill.start_date}</span>
+                    ${ill.end_date ? ` • <span><strong>Recovered:</strong> ${ill.end_date}</span>` : ' • <span style="color: #ef4444;">Active Recovery Phase</span>'}
+                  </div>
+                </div>
+                <div style="display: flex; gap: 0.35rem; align-items: center;">
+                  <button class="btn-secondary" onclick="app.toggleMedicalStatus(${ill.id}, '${ill.status === 'active' ? 'recovered' : 'active'}')" style="padding: 0.3rem 0.6rem; font-size: 0.74rem;">
+                    ${ill.status === 'active' ? 'Mark Recovered' : 'Mark Ongoing'}
+                  </button>
+                  <button class="btn-secondary" onclick="app.deleteMedicalLog(${ill.id})" style="padding: 0.3rem 0.5rem; font-size: 0.74rem; color: #ef4444;" title="Delete Record">
+                    <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                  </button>
+                </div>
+              </div>
+              ${ill.notes ? `
+                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; background: var(--bg-surface); padding: 0.6rem 0.85rem; border-radius: 4px; line-height: 1.45;">
+                  <strong>Protocol Adjustments:</strong> ${ill.notes}
+                </div>
+              ` : ''}
+            </div>
+          `).join('');
+        }
+      }
+
+      // 3. Render Blood Tests & Lab Biomarkers
+      const bloodContainer = document.getElementById('bloodTestsListContainer');
+      if (bloodContainer) {
+        if (bloodTests.length === 0) {
+          bloodContainer.innerHTML = `<div class="empty-state" style="padding: 2rem 1rem;"><i data-lucide="flask-conical" style="width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.5rem;"></i><p>No diagnostic blood tests logged yet.</p></div>`;
+        } else {
+          bloodContainer.innerHTML = bloodTests.map(b => {
+            const biomarkers = (b.lab_results || '').split(',').map(s => s.trim()).filter(Boolean);
+            return `
+              <div class="medical-card">
+                <div class="medical-card-header">
+                  <div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                      <span class="medical-card-title">${b.title}</span>
+                      <span class="med-type-pill pill-blood">BLOOD TEST</span>
+                    </div>
+                    <div class="medical-card-meta">
+                      <span><strong>Date:</strong> ${b.start_date}</span>
+                      ${b.doctor_name ? ` • <span><strong>Laboratory:</strong> ${b.doctor_name}</span>` : ''}
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 0.35rem; align-items: center;">
+                    <button class="btn-secondary" onclick="app.deleteMedicalLog(${b.id})" style="padding: 0.3rem 0.5rem; font-size: 0.74rem; color: #ef4444;" title="Delete Record">
+                      <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                    </button>
+                  </div>
+                </div>
+
+                ${biomarkers.length > 0 ? `
+                  <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.65rem;">
+                    ${biomarkers.map(bm => `<span class="biomarker-chip">${bm}</span>`).join('')}
+                  </div>
+                ` : ''}
+
+                ${b.notes ? `
+                  <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.6rem; background: var(--bg-surface); padding: 0.5rem 0.75rem; border-radius: 4px;">
+                    <strong>Physician Remarks:</strong> ${b.notes}
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load medical logs:', e);
+    }
+    this.refreshIcons();
+  }
+
+  async submitMedicalLog(e, type) {
+    e.preventDefault();
+    let payload = {};
+
+    if (type === 'medication') {
+      const typeEl = document.getElementById('medType');
+      payload = {
+        log_type: typeEl ? typeEl.value : 'tablet',
+        title: document.getElementById('medTitle').value.trim(),
+        dosage: document.getElementById('medDosage').value.trim(),
+        frequency: document.getElementById('medFrequency').value,
+        timing: document.getElementById('medTiming').value,
+        start_date: document.getElementById('medStartDate').value || this.getTodayDateString(),
+        end_date: document.getElementById('medEndDate').value || '',
+        notes: document.getElementById('medNotes').value.trim(),
+        status: 'active'
+      };
+    } else if (type === 'illness') {
+      const notesEl = document.getElementById('illnessNotes');
+      const symptomsEl = document.getElementById('illnessSymptoms');
+      const combinedNotes = [symptomsEl ? `Symptoms: ${symptomsEl.value.trim()}` : '', notesEl ? notesEl.value.trim() : ''].filter(Boolean).join(' • ');
+
+      payload = {
+        log_type: 'illness',
+        title: document.getElementById('illnessTitle').value.trim(),
+        severity: document.getElementById('illnessSeverity').value,
+        start_date: document.getElementById('illnessStartDate').value || this.getTodayDateString(),
+        end_date: document.getElementById('illnessEndDate').value || '',
+        notes: combinedNotes,
+        status: document.getElementById('illnessEndDate').value ? 'resolved' : 'active'
+      };
+    } else if (type === 'blood_test') {
+      payload = {
+        log_type: 'blood_test',
+        title: document.getElementById('bloodTitle').value.trim(),
+        doctor_name: document.getElementById('bloodLab').value.trim(),
+        start_date: document.getElementById('bloodDate').value || this.getTodayDateString(),
+        lab_results: document.getElementById('bloodLabResults').value.trim(),
+        notes: document.getElementById('bloodNotes').value.trim(),
+        status: 'completed'
+      };
+    }
+
+    try {
+      this.showToast(`Saving ${type} record...`);
+      await this.apiFetch('/api/medical', { method: 'POST', body: payload });
+      this.showToast(`${payload.title} logged successfully!`);
+
+      // Reset form
+      if (type === 'medication') document.getElementById('medicationForm')?.reset();
+      if (type === 'illness') document.getElementById('illnessForm')?.reset();
+      if (type === 'blood_test') document.getElementById('bloodTestForm')?.reset();
+
+      await this.loadMedicalLogs();
+      await this.loadAiAudit();
+      await this.loadDashboard();
+    } catch (err) {
+      alert(`Error saving ${type}: ` + err.message);
+    }
+  }
+
+  async toggleMedicalStatus(id, newStatus) {
+    try {
+      await this.apiFetch('/api/medical/toggle', {
+        method: 'POST',
+        body: { id, status: newStatus }
+      });
+      this.showToast(`Status updated to ${newStatus}!`);
+      await this.loadMedicalLogs();
+      await this.loadAiAudit();
+      await this.loadDashboard();
+    } catch (e) {
+      alert('Failed to update status: ' + e.message);
+    }
+  }
+
+  async deleteMedicalLog(id) {
+    if (!confirm('Are you sure you want to permanently delete this clinical record?')) return;
+    try {
+      await this.apiFetch(`/api/medical/${id}`, { method: 'DELETE' });
+      this.showToast('Clinical record deleted.');
+      await this.loadMedicalLogs();
+      await this.loadAiAudit();
+      await this.loadDashboard();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  insertBiomarkerTemplate() {
+    const textarea = document.getElementById('bloodLabResults');
+    if (!textarea) return;
+    textarea.value = "HbA1c: 5.4%, Fasting Glucose: 92 mg/dL, Total Cholesterol: 175 mg/dL, Triglycerides: 110 mg/dL, HDL: 48 mg/dL, LDL: 105 mg/dL, Vitamin D3: 34 ng/mL, Vitamin B12: 480 pg/mL, Total Testosterone: 640 ng/dL, SGPT/ALT: 28 U/L, Creatinine: 0.95 mg/dL";
+    this.showToast('Standard diagnostic panel template inserted!');
+  }
+
+  // =============================================================
+  // 30-DAY MONTHLY HEALTH & CLINICAL AUDIT REPORT MODAL
+  // =============================================================
+  openMonthlyReportModal() {
+    const modal = document.getElementById('monthlyReportModal');
+    if (!modal) return;
+
+    // Populate Month Selector with the last 6 calendar months
+    const select = document.getElementById('monthlyReportSelect');
+    if (select) {
+      const now = new Date();
+      let optionsHtml = '';
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const monthVal = `${yyyy}-${mm}`;
+        const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        optionsHtml += `<option value="${monthVal}">${label}</option>`;
+      }
+      select.innerHTML = optionsHtml;
+      this.loadMonthlyReportData(select.value);
+    }
+
+    modal.style.display = 'flex';
+    this.refreshIcons();
+  }
+
+  closeMonthlyReportModal() {
+    const modal = document.getElementById('monthlyReportModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  closeMonthlyReportModalIfOutside(e) {
+    if (e.target && e.target.id === 'monthlyReportModal') {
+      this.closeMonthlyReportModal();
+    }
+  }
+
+  async loadMonthlyReportData(yearMonth) {
+    const container = document.getElementById('monthlyReportContentContainer');
+    if (!container) return;
+
+    container.innerHTML = `<div style="text-align: center; padding: 3rem;"><span class="hevy-spinner" style="width: 24px; height: 24px;"></span><p style="margin-top: 0.75rem; color: var(--text-muted); font-size: 0.85rem;">Compiling 30-day health telemetry and clinical audit...</p></div>`;
+
+    try {
+      // Gather client telemetry & medical logs
+      let clientData = null;
+      if (this.currentUser) {
+        try {
+          clientData = await this.apiFetch(`/api/admin/client-full-data?client_id=${this.currentUser.id}`);
+        } catch (e) {
+          // If not admin, fetch standard endpoints
+          const [fRes, fitRes, slRes, wRes, mRes] = await Promise.all([
+            this.apiFetch('/api/food'),
+            this.apiFetch('/api/fitness'),
+            this.apiFetch('/api/sleep'),
+            this.apiFetch('/api/weight'),
+            this.apiFetch('/api/medical')
+          ]);
+          clientData = {
+            food_logs: fRes.items || [],
+            fitness_logs: fitRes.items || [],
+            sleep_logs: slRes.items || [],
+            weight_logs: wRes.items || [],
+            medical_logs: mRes.items || []
+          };
+        }
+      }
+
+      if (!clientData) {
+        container.innerHTML = `<div class="empty-state"><p>Unable to retrieve monthly telemetry data.</p></div>`;
+        return;
+      }
+
+      const food = (clientData.food_logs || []).filter(x => (x.logged_date || '').startsWith(yearMonth));
+      const fit = (clientData.fitness_logs || []).filter(x => (x.logged_date || '').startsWith(yearMonth));
+      const sleep = (clientData.sleep_logs || []).filter(x => (x.logged_date || '').startsWith(yearMonth));
+      const weight = (clientData.weight_logs || []).filter(x => (x.logged_date || '').startsWith(yearMonth));
+      const medLogs = clientData.medical_logs || [];
+
+      // Monthly aggregates
+      const totalCal = food.reduce((sum, x) => sum + (x.calories || 0), 0);
+      const totalProtein = food.reduce((sum, x) => sum + (parseFloat(x.protein) || 0), 0);
+      const daysLogged = new Set(food.map(x => x.logged_date)).size;
+      const avgDailyCal = daysLogged > 0 ? Math.round(totalCal / daysLogged) : 0;
+      const avgDailyProtein = daysLogged > 0 ? Math.round(totalProtein / daysLogged) : 0;
+
+      const totalBurn = fit.reduce((sum, x) => sum + (x.calories_burned || 0), 0);
+      const totalSteps = fit.reduce((sum, x) => sum + (x.steps || 0), 0);
+      const workoutCount = fit.length;
+
+      const avgSleepScore = sleep.length > 0 ? Math.round(sleep.reduce((sum, x) => sum + (x.sleep_score || 0), 0) / sleep.length) : 0;
+      const avgSleepHours = sleep.length > 0 ? (sleep.reduce((sum, x) => sum + (parseFloat(x.total_hours) || 0), 0) / sleep.length).toFixed(1) : 0;
+
+      // Medical & Clinical highlights for the month
+      const monthlyIllnesses = medLogs.filter(m => m.log_type === 'illness' && (m.start_date || '').startsWith(yearMonth));
+      const activePrescriptions = medLogs.filter(m => (m.log_type === 'tablet' || m.log_type === 'injection' || m.log_type === 'medication'));
+      const monthlyBloodTests = medLogs.filter(m => m.log_type === 'blood_test' && (m.start_date || '').startsWith(yearMonth));
+
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+          <!-- High-level Scorecard -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem;">
+            <div style="background: var(--bg-surface); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+              <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Average Nutrition</div>
+              <div style="font-size: 1.3rem; font-weight: 800; color: var(--gold-dark); margin-top: 0.25rem;">${avgDailyCal} kcal</div>
+              <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem;">${avgDailyProtein}g protein/day (${daysLogged} days tracked)</div>
+            </div>
+
+            <div style="background: var(--bg-surface); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+              <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Physical Exertion</div>
+              <div style="font-size: 1.3rem; font-weight: 800; color: var(--text-primary); margin-top: 0.25rem;">${totalBurn.toLocaleString()} kcal</div>
+              <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem;">${workoutCount} workouts • ${(totalSteps).toLocaleString()} steps</div>
+            </div>
+
+            <div style="background: var(--bg-surface); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+              <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Sleep Restoration</div>
+              <div style="font-size: 1.3rem; font-weight: 800; color: #10b981; margin-top: 0.25rem;">${avgSleepScore}/100</div>
+              <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem;">Avg ${avgSleepHours} hrs sleep per night</div>
+            </div>
+
+            <div style="background: var(--bg-surface); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+              <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Clinical Episodes</div>
+              <div style="font-size: 1.3rem; font-weight: 800; color: ${monthlyIllnesses.length > 0 ? '#ef4444' : '#10b981'}; margin-top: 0.25rem;">
+                ${monthlyIllnesses.length} Episode(s)
+              </div>
+              <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem;">${activePrescriptions.length} medications monitored</div>
+            </div>
+          </div>
+
+          <!-- Section 1: Sickness, Clinical Rest & Medical Adherence -->
+          <div style="background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <h4 style="font-size: 0.92rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+                <i data-lucide="shield-alert" style="width: 16px; height: 16px; color: #ef4444;"></i>
+                <span>Clinical Illness Episodes & Recovery Audit</span>
+              </h4>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">${monthlyIllnesses.length} logged this month</span>
+            </div>
+
+            ${monthlyIllnesses.length > 0 ? `
+              <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                ${monthlyIllnesses.map(ill => `
+                  <div style="padding: 0.75rem; background: var(--bg-elevated); border-left: 3px solid #ef4444; border-radius: 4px; font-size: 0.8rem;">
+                    <div style="display: flex; justify-content: space-between;">
+                      <span style="font-weight: 700; color: #ef4444;">${ill.title} (${ill.severity || 'Moderate'})</span>
+                      <span style="color: var(--text-muted); font-size: 0.74rem;">${ill.start_date} ${ill.end_date ? `to ${ill.end_date}` : '(Ongoing)'}</span>
+                    </div>
+                    <div style="color: var(--text-secondary); margin-top: 0.35rem;">${ill.notes || 'Clinical recovery protocols applied. Workout score preserved to prevent immune stress.'}</div>
+                  </div>
+                `).join('')}
+              </div>
+            ` : `
+              <div style="font-size: 0.82rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0;">
+                <i data-lucide="check-circle" style="width: 16px; height: 16px; color: #10b981;"></i>
+                <span>No sickness episodes occurred during this calendar month. Unbroken physiological consistency maintained.</span>
+              </div>
+            `}
+          </div>
+
+          <!-- Section 2: Blood Biomarkers & Diagnostic Reports -->
+          <div style="background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <h4 style="font-size: 0.92rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+                <i data-lucide="flask-conical" style="width: 16px; height: 16px; color: #a855f7;"></i>
+                <span>Diagnostic Blood Tests & Clinical Biomarkers</span>
+              </h4>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">${monthlyBloodTests.length} recorded</span>
+            </div>
+
+            ${monthlyBloodTests.length > 0 ? `
+              <div style="display: flex; flex-direction: column; gap: 0.65rem;">
+                ${monthlyBloodTests.map(b => `
+                  <div style="padding: 0.75rem; background: var(--bg-elevated); border-radius: 4px;">
+                    <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 0.85rem;">
+                      <span>${b.title}</span>
+                      <span style="color: var(--text-muted); font-size: 0.74rem;">${b.start_date}</span>
+                    </div>
+                    <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.35rem; line-height: 1.45;">
+                      <strong>Biomarkers:</strong> ${b.lab_results || 'Standard metabolic panel'}
+                    </div>
+                    ${b.notes ? `<div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 0.25rem; font-style: italic;">Remarks: ${b.notes}</div>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            ` : `
+              <div style="font-size: 0.82rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0;">
+                <i data-lucide="info" style="width: 16px; height: 16px; color: var(--gold-dark);"></i>
+                <span>No blood tests conducted in this specific month. Navigate to the Medical tab to log routine diagnostic panels.</span>
+              </div>
+            `}
+          </div>
+
+          <!-- Section 3: Final Clinical Performance Analysis -->
+          <div style="background: var(--bg-elevated); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1.25rem;">
+            <h4 style="font-size: 0.88rem; font-weight: 700; color: var(--gold-dark); margin-bottom: 0.5rem; text-transform: uppercase;">
+              ★ FYN Medical & Performance Intelligence Summary
+            </h4>
+            <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.55; margin: 0;">
+              Over the course of ${yearMonth}, the client achieved an average nutrition density of ${avgDailyCal} kcal and ${avgDailyProtein}g protein across ${daysLogged} tracked days. Total active physical burn reached ${totalBurn.toLocaleString()} kcal over ${workoutCount} workouts. ${monthlyIllnesses.length > 0 ? `Clinical protocols were activated for ${monthlyIllnesses[0].title}, protecting recovery without compromising accountability.` : 'Zero sickness downtime was observed, demonstrating robust immunological stability.'}
+            </p>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      container.innerHTML = `<div class="empty-state"><p>Error generating monthly report: ${e.message}</p></div>`;
+    }
+    this.refreshIcons();
+  }
   showToast(message) {
     const toast = document.getElementById('toastNotice');
     const toastText = document.getElementById('toastNoticeText');

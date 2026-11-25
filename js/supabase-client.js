@@ -62,13 +62,14 @@ async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
     const qDate = dateStr || new Date().toISOString().split('T')[0];
     const targetUid = (userId === 3 || userId === 5) ? 5 : (userId || 5);
 
-    const [foodRes, fitRes, sleepRes, userRes, setRes, protoRes] = await Promise.all([
+    const [foodRes, fitRes, sleepRes, userRes, setRes, protoRes, medRes] = await Promise.all([
       sb.from('food_logs').select('*').eq('user_id', targetUid).eq('logged_date', qDate).order('created_at', { ascending: true }),
       sb.from('fitness_logs').select('*').eq('user_id', targetUid).eq('logged_date', qDate).order('created_at', { ascending: true }),
       sb.from('sleep_logs').select('*').eq('user_id', targetUid).eq('logged_date', qDate).order('created_at', { ascending: false }).limit(1),
       sb.from('users').select('*').eq('id', targetUid).limit(1),
       sb.from('user_settings').select('*').eq('user_id', targetUid).limit(1),
-      sb.from('daily_protocols').select('*').eq('user_id', targetUid).eq('protocol_date', qDate)
+      sb.from('daily_protocols').select('*').eq('user_id', targetUid).eq('protocol_date', qDate),
+      sb.from('medical_logs').select('*').eq('user_id', targetUid).order('start_date', { ascending: false })
     ]);
 
     const foods = foodRes.data || [];
@@ -77,6 +78,11 @@ async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
     const user = (userRes.data && userRes.data[0]) || {};
     const settings = (setRes.data && setRes.data[0]) || {};
     const protocols = protoRes.data || [];
+    const medLogs = medRes.data || [];
+
+    const activeIllnesses = medLogs.filter(m => m.log_type === 'illness' && (m.status === 'active' || !m.end_date || m.end_date >= qDate) && m.start_date <= qDate);
+    const activeMeds = medLogs.filter(m => (m.log_type === 'tablet' || m.log_type === 'injection' || m.log_type === 'medication') && m.status === 'active' && m.start_date <= qDate && (!m.end_date || m.end_date >= qDate));
+    const latestBlood = medLogs.filter(m => m.log_type === 'blood_test' && m.start_date <= qDate)[0] || null;
 
     const totalCal = foods.reduce((acc, f) => acc + (f.calories || 0), 0);
     const totalProtein = foods.reduce((acc, f) => acc + (parseFloat(f.protein) || 0), 0);
@@ -100,12 +106,16 @@ async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
       foodScore = Math.max(10, Math.round(cScore * 0.5 + pScore * 0.5));
     }
 
-    // 2. Exercise Score — Honest Zero Marks if no workout/steps logged
+    // 2. Exercise Score — Honest Zero Marks if no workout/steps logged (unless clinical illness rest active)
     let exerciseScore = 0;
     if (fits.length > 0 || totalSteps > 0 || totalBurn > 0) {
       const stepScore = Math.min(100, Math.round((totalSteps / targetSteps) * 100));
       const burnScore = Math.min(100, Math.round((totalBurn / targetBurn) * 100));
       exerciseScore = Math.max(10, Math.round(stepScore * 0.5 + burnScore * 0.5));
+    }
+    if (activeIllnesses.length > 0) {
+      // Do not penalize client score when ill — clinical rest is paramount
+      exerciseScore = Math.max(exerciseScore, 85);
     }
 
     // 3. Sleep Score — Honest Zero Marks if no sleep logged
@@ -114,28 +124,40 @@ async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
       sleepScore = sleep.sleep_score || Math.min(100, Math.round(((parseFloat(sleep.total_hours)) / 8.0) * 100));
     }
 
-    // 4. Recovery Score — Based on verified habits and sleep recovery
+    // 4. Recovery Score — Based on verified habits, medical compliance, and sleep recovery
     let recoveryScore = 0;
     const habitsPct = (habitsTotal > 0) ? Math.round((habitsDone / habitsTotal) * 100) : 0;
-    if (sleepScore > 0 || habitsDone > 0) {
-      const sleepWeight = sleepScore > 0 ? sleepScore * 0.6 : 0;
-      const habitWeight = habitsPct * 0.4;
-      recoveryScore = Math.round(sleepWeight + habitWeight);
+    if (sleepScore > 0 || habitsDone > 0 || activeMeds.length > 0) {
+      const sleepWeight = sleepScore > 0 ? sleepScore * 0.5 : 0;
+      const habitWeight = habitsPct * 0.35;
+      const medBonus = activeMeds.length > 0 ? 15 : 0;
+      recoveryScore = Math.min(100, Math.round(sleepWeight + habitWeight + medBonus));
     }
 
-    // Overall Score — Real weighted mathematical calculation (Zero phantom marks)
+    // Overall Score — Real weighted mathematical calculation
     const overallScore = Math.round(foodScore * 0.35 + exerciseScore * 0.30 + sleepScore * 0.20 + recoveryScore * 0.15);
 
     // Summary Text
+    let medNotice = '';
+    if (activeIllnesses.length > 0) {
+      medNotice = `[CLINICAL REST ADVISORY: Active illness detected (${activeIllnesses[0].title} - ${activeIllnesses[0].severity || 'Moderate'}). High-intensity workout requirements relaxed to support cellular immune recovery.] `;
+    }
+
     const foodSummary = (foods.length > 0 && totalCal > 0)
       ? `${foods.length} meals (${totalCal}/${targetCal} kcal, ${Math.round(totalProtein)}g protein)`
       : `0 meals logged (0/${targetCal} kcal) — Nutrition tracking pending`;
     const fitSummary = (fits.length > 0 || totalSteps > 0 || totalBurn > 0)
       ? `${fits.length} workout sessions (${totalBurn} kcal, ${totalSteps.toLocaleString()} steps)`
-      : `0 workouts logged (0 steps)`;
-    const summaryText = `[FYN Master Telemetry Audit]: Overall Day Score is ${overallScore}/100. Logged: ${foodSummary} · ${fitSummary} · Habits executed: ${habitsDone}/${habitsTotal || 0}. Body weight: ${user.weight_kg || 124} kg.`;
+      : (activeIllnesses.length > 0 ? `Clinical Bed Rest Active (${activeIllnesses[0].title})` : `0 workouts logged (0 steps)`);
+    const summaryText = `${medNotice}[FYN Master Telemetry Audit]: Overall Day Score is ${overallScore}/100. Logged: ${foodSummary} · ${fitSummary} · Habits executed: ${habitsDone}/${habitsTotal || 0}. Body weight: ${user.weight_kg || 124} kg.`;
 
     const strengthsList = [];
+    if (activeIllnesses.length > 0) {
+      strengthsList.push(`Prioritizing physiological recovery during illness (${activeIllnesses[0].title}) — prevented immune depletion`);
+    }
+    if (activeMeds.length > 0) {
+      strengthsList.push(`Adhering to medical prescriptions (${activeMeds.length} active medication/injection item(s))`);
+    }
     if (foods.length > 0 && totalCal > 0) {
       strengthsList.push(`${foods.length} planned meals tracked (${totalCal} kcal, ${Math.round(totalProtein)}g protein)`);
     }
@@ -157,12 +179,15 @@ async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
     }
 
     const improvementsList = [];
-    if (foods.length === 0 || totalCal === 0) {
+    if (activeIllnesses.length > 0) {
+      improvementsList.push(`Clinical Recovery Focus: Maintain 3.5-4L electrolyte hydration (ORS), light digestible nutrition, and adequate bed rest until ${activeIllnesses[0].title} resolves`);
+    }
+    if ((foods.length === 0 || totalCal === 0) && activeIllnesses.length === 0) {
       improvementsList.push(`No meals logged yet today. Track your meals to hit your ${targetCal.toLocaleString()} kcal and ${targetProtein}g protein target`);
-    } else if (totalProtein < targetProtein) {
+    } else if (totalProtein < targetProtein && activeIllnesses.length === 0) {
       improvementsList.push(`Protein deficit: ${Math.round(targetProtein - totalProtein)}g protein needed to meet daily goal`);
     }
-    if (totalSteps < targetSteps) {
+    if (totalSteps < targetSteps && activeIllnesses.length === 0) {
       improvementsList.push(`Step deficit: ${(targetSteps - totalSteps).toLocaleString()} steps remaining to hit your ${targetSteps.toLocaleString()} target`);
     }
     if (habitsDone < habitsTotal) {
@@ -190,7 +215,15 @@ async function recalculateSupabaseAiAudit(sb, userId, dateStr) {
     }, { onConflict: 'user_id,audit_date' }).select();
     if (aErr) console.warn('[FYN AI Audit Upsert Warning]:', aErr);
 
-    return (auditData && auditData[0]) || { user_id: targetUid, ...auditPayload };
+    const baseResult = (auditData && auditData[0]) || { user_id: targetUid, ...auditPayload };
+    return {
+      ...baseResult,
+      medical: {
+        active_illnesses: activeIllnesses,
+        active_medications: activeMeds,
+        latest_blood_test: latestBlood
+      }
+    };
   } catch (err) {
     console.error('[FYN AI Audit Recalculate Error]:', err);
     return null;
@@ -830,7 +863,8 @@ window.FYN_SUPABASE = {
         { data: pData },
         { data: jData },
         { data: aData },
-        { data: wsData }
+        { data: wsData },
+        { data: mData }
       ] = await Promise.all([
         sb.from('users').select('id, username, email, name, role, phone, height_cm, weight_kg, medical_history, blood_reports, created_at').eq('id', targetClientId).limit(1),
         sb.from('user_settings').select('*').eq('user_id', targetClientId).limit(1),
@@ -841,7 +875,8 @@ window.FYN_SUPABASE = {
         sb.from('daily_protocols').select('*').eq('user_id', targetClientId).order('protocol_date', { ascending: false }),
         sb.from('daily_journals').select('*').eq('user_id', targetClientId).order('journal_date', { ascending: false }),
         sb.from('daily_ai_audits').select('*').eq('user_id', targetClientId).order('audit_date', { ascending: false }),
-        sb.from('workout_sessions').select('*').eq('user_id', targetClientId).order('session_date', { ascending: false })
+        sb.from('workout_sessions').select('*').eq('user_id', targetClientId).order('session_date', { ascending: false }),
+        sb.from('medical_logs').select('*').eq('user_id', targetClientId).order('start_date', { ascending: false })
       ]);
 
       return {
@@ -854,7 +889,8 @@ window.FYN_SUPABASE = {
         daily_protocols: pData || [],
         daily_journals: jData || [],
         daily_ai_audits: aData || [],
-        workout_sessions: wsData || []
+        workout_sessions: wsData || [],
+        medical_logs: mData || []
       };
     }
 
@@ -883,7 +919,8 @@ window.FYN_SUPABASE = {
           sb.from('fitness_logs').update({ image_url: '' }).eq('user_id', targetClientId),
           sb.from('sleep_logs').update({ image_url: '' }).eq('user_id', targetClientId),
           sb.from('weight_logs').update({ image_url: '' }).eq('user_id', targetClientId),
-          sb.from('workout_sessions').update({ garmin_image_url: '' }).eq('user_id', targetClientId)
+          sb.from('workout_sessions').update({ garmin_image_url: '' }).eq('user_id', targetClientId),
+          sb.from('medical_logs').update({ image_url: '' }).eq('user_id', targetClientId)
         ]);
         // Prune stale sessions except active token
         if (token) {
@@ -907,7 +944,8 @@ window.FYN_SUPABASE = {
           sb.from('daily_protocols').delete().eq('user_id', targetClientId),
           sb.from('daily_journals').delete().eq('user_id', targetClientId),
           sb.from('daily_ai_audits').delete().eq('user_id', targetClientId),
-          sb.from('workout_sessions').delete().eq('user_id', targetClientId)
+          sb.from('workout_sessions').delete().eq('user_id', targetClientId),
+          sb.from('medical_logs').delete().eq('user_id', targetClientId)
         ]);
         if (token) {
           await sb.from('sessions').delete().eq('user_id', targetClientId).neq('token', token);
@@ -933,6 +971,7 @@ window.FYN_SUPABASE = {
           sb.from('workout_sessions').delete().eq('user_id', targetClientId),
           sb.from('workout_plans').delete().eq('user_id', targetClientId),
           sb.from('meal_templates').delete().eq('user_id', targetClientId),
+          sb.from('medical_logs').delete().eq('user_id', targetClientId),
           sb.from('user_settings').delete().eq('user_id', targetClientId),
           sb.from('sessions').delete().eq('user_id', targetClientId)
         ]);
@@ -1783,6 +1822,70 @@ window.FYN_SUPABASE = {
       return await runClientVisionAnalysis(rawImg, category, activeUser);
     }
 
+    // 30. HealthifyMe-Calibrated Indian Food AI Macro Estimator (/api/food/ai-estimate)
+    if (path === '/api/food/ai-estimate' && method === 'POST') {
+      const q = (body.query || '').trim();
+      const estimate = estimateFoodMacrosClient(q);
+      return { success: true, result: estimate };
+    }
+
+    // 31. Medical, Tablets, Injections, Illness & Blood Tests (/api/medical)
+    if (path === '/api/medical') {
+      if (method === 'GET') {
+        const typeFilter = params.type;
+        let queryBuilder = sb.from('medical_logs').select('*').in('user_id', userScope);
+        if (typeFilter) {
+          queryBuilder = queryBuilder.eq('log_type', typeFilter);
+        }
+        const { data, error } = await queryBuilder.order('start_date', { ascending: false }).order('id', { ascending: false });
+        if (error) throw error;
+        return { items: data || [] };
+      }
+      if (method === 'POST') {
+        const payload = {
+          user_id: activeUserId,
+          log_type: (body.log_type || 'tablet').toLowerCase(),
+          title: body.title || 'Medication',
+          dosage: body.dosage || '',
+          frequency: body.frequency || '',
+          timing: body.timing || '',
+          severity: body.severity || '',
+          status: body.status || 'active',
+          start_date: body.start_date || new Date().toISOString().split('T')[0],
+          end_date: body.end_date || '',
+          lab_results: body.lab_results || '',
+          doctor_name: body.doctor_name || '',
+          notes: body.notes || '',
+          image_url: body.image_url || ''
+        };
+        const { data, error } = await sb.from('medical_logs').insert([payload]).select();
+        if (error) throw error;
+        await recalculateSupabaseAiAudit(sb, activeUserId, payload.start_date);
+        return { message: `${payload.log_type} logged successfully to Supabase!`, id: data[0]?.id };
+      }
+    }
+
+    // 32. Toggle Medical / Illness Status (/api/medical/toggle)
+    if (path === '/api/medical/toggle' && method === 'POST') {
+      const itemId = body.id;
+      const newStatus = body.status || 'resolved';
+      const { data, error } = await sb.from('medical_logs').update({ status: newStatus }).eq('id', itemId).eq('user_id', activeUserId).select();
+      if (error) throw error;
+      const mDate = data?.[0]?.start_date || new Date().toISOString().split('T')[0];
+      await recalculateSupabaseAiAudit(sb, activeUserId, mDate);
+      return { message: 'Status updated!', status: newStatus };
+    }
+
+    // 33. Delete Medical Record (/api/medical/:id)
+    if (path.startsWith('/api/medical/') && method === 'DELETE') {
+      const medId = parseInt(path.split('/').pop(), 10);
+      const { data } = await sb.from('medical_logs').select('start_date').eq('id', medId).eq('user_id', activeUserId).limit(1);
+      const mDate = data?.[0]?.start_date || new Date().toISOString().split('T')[0];
+      await sb.from('medical_logs').delete().eq('id', medId).eq('user_id', activeUserId);
+      await recalculateSupabaseAiAudit(sb, activeUserId, mDate);
+      return { message: 'Medical record deleted successfully.' };
+    }
+
     // Fallback for unhandled endpoints
     return { success: true };
   }
@@ -2285,5 +2388,104 @@ function extractTelemetryFromTextAndContext(ocrText = '', requestedCategory = 'a
     category: result.category,
     detected_category: result.category,
     data: result.data
+  };
+}
+
+// ===================================================================
+// HEALTHIFYME-CALIBRATED INDIAN FOOD MACRO ESTIMATOR (CLIENT-SIDE)
+// ===================================================================
+function estimateFoodMacrosClient(query) {
+  const q = (query || '').toLowerCase().trim();
+  if (!q) {
+    return {
+      dish_name: 'Custom Meal',
+      meal_type: 'Lunch',
+      calories: 350,
+      protein: 15,
+      carbs: 45,
+      fat: 10,
+      fiber: 4,
+      source: 'Default'
+    };
+  }
+
+  const db = [
+    { name: 'Salted Peanuts (30g)', match: ['salted peanut', 'namkeen peanut', 'peanut salted', 'salted peanuts'], cal: 170, p: 8.0, c: 5.0, f: 14.0, fib: 2.5, type: 'Snack', notes: 'HealthifyMe: 30g salted peanuts' },
+    { name: 'Salted Peanuts (100g)', match: ['100g peanut', '100g salted peanut', 'peanuts 100g', 'salted peanuts 100g'], cal: 567, p: 26.0, c: 16.0, f: 49.0, fib: 8.5, type: 'Snack', notes: 'HealthifyMe: 100g salted peanuts' },
+    { name: 'Roasted Peanuts (30g)', match: ['roasted peanut', 'bhuna peanut', 'mungfali', 'singdana'], cal: 166, p: 7.8, c: 4.8, f: 14.0, fib: 2.6, type: 'Snack', notes: 'HealthifyMe: 30g dry roasted peanuts' },
+    { name: 'Roti / Phulka (1 piece)', match: ['roti', 'phulka', 'chapati', 'fulka', 'chapatti'], cal: 85, p: 3.0, c: 18.0, f: 0.4, fib: 2.2, type: 'Lunch', notes: 'HealthifyMe: 1 wheat roti (30g dough, no ghee)' },
+    { name: 'Ghee Roti (1 piece)', match: ['ghee roti', 'butter roti'], cal: 110, p: 3.0, c: 18.0, f: 3.0, fib: 2.2, type: 'Lunch', notes: 'HealthifyMe: 1 wheat roti with 1/2 tsp ghee' },
+    { name: 'Paneer Raw (100g)', match: ['paneer', 'cottage cheese', 'raw paneer'], cal: 265, p: 18.3, c: 3.0, f: 20.8, fib: 0.0, type: 'Dinner', notes: 'HealthifyMe: 100g full-fat fresh paneer' },
+    { name: 'Low Fat Paneer (100g)', match: ['low fat paneer', 'skimmed paneer'], cal: 180, p: 25.0, c: 3.5, f: 7.0, fib: 0.0, type: 'Dinner', notes: 'HealthifyMe: 100g low-fat paneer' },
+    { name: 'Boiled Egg (1 whole)', match: ['boiled egg', 'whole egg', '1 egg', 'anda', 'egg'], cal: 74, p: 6.3, c: 0.4, f: 5.0, fib: 0.0, type: 'Breakfast', notes: 'HealthifyMe: 1 large whole egg (50g)' },
+    { name: 'Egg White (1 large)', match: ['egg white', 'egg whites', 'white egg'], cal: 17, p: 3.6, c: 0.2, f: 0.1, fib: 0.0, type: 'Breakfast', notes: 'HealthifyMe: 1 egg white (33g)' },
+    { name: 'Egg Bhurji (2 eggs)', match: ['egg bhurji', 'anda bhurji', 'scrambled egg'], cal: 190, p: 13.0, c: 4.0, f: 13.0, fib: 1.0, type: 'Breakfast', notes: 'HealthifyMe: 2-egg Indian bhurji' },
+    { name: 'Chicken Breast (100g)', match: ['chicken breast', 'boiled chicken', 'grilled chicken', 'chicken 100g'], cal: 165, p: 31.0, c: 0.0, f: 3.6, fib: 0.0, type: 'Lunch', notes: 'HealthifyMe: 100g skinless chicken breast' },
+    { name: 'Chicken Curry (150g)', match: ['chicken curry', 'murgh curry', 'chicken'], cal: 240, p: 22.0, c: 5.0, f: 14.0, fib: 1.5, type: 'Dinner', notes: 'HealthifyMe: 1 bowl home-cooked chicken curry' },
+    { name: 'Mutton Curry (150g)', match: ['mutton curry', 'mutton', 'gosht'], cal: 320, p: 24.0, c: 4.0, f: 22.0, fib: 1.0, type: 'Dinner', notes: 'HealthifyMe: 1 bowl mutton curry' },
+    { name: 'Dal Tadka / Yellow Dal (150g)', match: ['dal tadka', 'yellow dal', 'arhar dal', 'toor dal', 'moong dal', 'dal fry', 'dal'], cal: 150, p: 8.0, c: 22.0, f: 4.0, fib: 5.0, type: 'Lunch', notes: 'HealthifyMe: 1 katori dal' },
+    { name: 'Dal Makhani (150g)', match: ['dal makhani', 'makhani dal', 'urad dal'], cal: 260, p: 9.0, c: 26.0, f: 14.0, fib: 6.0, type: 'Dinner', notes: 'HealthifyMe: 1 katori dal makhani with butter' },
+    { name: 'Chana Masala (150g)', match: ['chana masala', 'chickpeas', 'chana', 'safed chana', 'chole'], cal: 240, p: 11.0, c: 35.0, f: 6.0, fib: 8.0, type: 'Lunch', notes: 'HealthifyMe: 1 bowl chana masala' },
+    { name: 'Rajma Masala (150g)', match: ['rajma', 'kidney beans', 'rajma chawal'], cal: 220, p: 12.0, c: 32.0, f: 5.0, fib: 9.0, type: 'Lunch', notes: 'HealthifyMe: 1 bowl rajma curry' },
+    { name: 'White Rice Cooked (150g)', match: ['white rice', 'rice', 'boiled rice', 'steamed rice', 'chawal'], cal: 195, p: 4.0, c: 42.0, f: 0.5, fib: 0.6, type: 'Lunch', notes: 'HealthifyMe: 1 medium katori cooked white rice' },
+    { name: 'Brown Rice Cooked (150g)', match: ['brown rice'], cal: 165, p: 3.5, c: 34.0, f: 1.2, fib: 2.5, type: 'Lunch', notes: 'HealthifyMe: 1 medium katori cooked brown rice' },
+    { name: 'Curd / Dahi (100g)', match: ['curd', 'dahi', 'yogurt', 'plain curd'], cal: 60, p: 3.5, c: 4.5, f: 3.0, fib: 0.0, type: 'Snack', notes: 'HealthifyMe: 100g home-set curd' },
+    { name: 'Greek Yogurt (100g)', match: ['greek yogurt', 'epigamia'], cal: 97, p: 10.0, c: 4.0, f: 4.5, fib: 0.0, type: 'Snack', notes: 'HealthifyMe: 100g Greek yogurt' },
+    { name: 'Whey Protein (1 scoop / 30g)', match: ['whey protein', 'protein shake', 'whey', 'isolate whey'], cal: 120, p: 24.0, c: 2.0, f: 1.5, fib: 0.5, type: 'Snack', notes: 'HealthifyMe: 1 scoop 100% whey protein' },
+    { name: 'Poha (1 plate / 150g)', match: ['poha', 'flattened rice'], cal: 250, p: 4.5, c: 45.0, f: 6.0, fib: 2.5, type: 'Breakfast', notes: 'HealthifyMe: 1 plate kanda poha with peanuts' },
+    { name: 'Upma (1 plate / 150g)', match: ['upma', 'rava upma'], cal: 220, p: 5.0, c: 38.0, f: 6.0, fib: 2.8, type: 'Breakfast', notes: 'HealthifyMe: 1 plate suji upma' },
+    { name: 'Besan Chilla (1 piece)', match: ['besan chilla', 'chilla', 'gram flour pancake'], cal: 135, p: 6.5, c: 16.0, f: 5.0, fib: 3.0, type: 'Breakfast', notes: 'HealthifyMe: 1 besan chilla with veggies' },
+    { name: 'Moong Dal Khichdi (200g)', match: ['khichdi', 'dal khichdi', 'moong khichdi'], cal: 210, p: 7.0, c: 35.0, f: 4.0, fib: 3.5, type: 'Dinner', notes: 'HealthifyMe: 1 bowl comforting moong dal khichdi' },
+    { name: 'Oats with Water (40g dry)', match: ['oats', 'oatmeal', 'plain oats'], cal: 150, p: 5.0, c: 27.0, f: 3.0, fib: 4.0, type: 'Breakfast', notes: 'HealthifyMe: 40g rolled oats in water' },
+    { name: 'Almonds (10 pieces)', match: ['almonds', 'badam'], cal: 70, p: 2.5, c: 2.5, f: 6.0, fib: 1.5, type: 'Snack', notes: 'HealthifyMe: 10 raw almonds' },
+    { name: 'Walnuts (4 halves / 12g)', match: ['walnuts', 'akhrot'], cal: 80, p: 1.8, c: 1.5, f: 8.0, fib: 0.8, type: 'Snack', notes: 'HealthifyMe: 4 walnut halves' },
+    { name: 'Apple (1 medium / 150g)', match: ['apple', 'seb'], cal: 78, p: 0.4, c: 20.0, f: 0.2, fib: 3.5, type: 'Snack', notes: 'HealthifyMe: 1 medium crisp apple' },
+    { name: 'Banana (1 medium / 100g)', match: ['banana', 'kela'], cal: 89, p: 1.1, c: 23.0, f: 0.3, fib: 2.6, type: 'Snack', notes: 'HealthifyMe: 1 medium banana' },
+    { name: 'Sweet Potato Boiled (100g)', match: ['sweet potato', 'shakarkandi'], cal: 86, p: 1.6, c: 20.0, f: 0.1, fib: 3.0, type: 'Breakfast', notes: 'HealthifyMe: 100g boiled sweet potato' },
+    { name: 'Soya Chunks (50g raw)', match: ['soya chunks', 'soy chunks', 'nutrela'], cal: 170, p: 26.0, c: 16.0, f: 0.5, fib: 6.5, type: 'Lunch', notes: 'HealthifyMe: 50g raw soya chunks' },
+    { name: 'Idli (2 pieces with sambar)', match: ['idli', 'idlis'], cal: 160, p: 5.0, c: 32.0, f: 1.5, fib: 2.5, type: 'Breakfast', notes: 'HealthifyMe: 2 steamed rice idlis with sambar' },
+    { name: 'Plain Dosa (1 piece)', match: ['plain dosa', 'dosa'], cal: 135, p: 3.0, c: 22.0, f: 4.0, fib: 1.2, type: 'Breakfast', notes: 'HealthifyMe: 1 crisp plain dosa' },
+    { name: 'Masala Dosa (1 piece)', match: ['masala dosa'], cal: 250, p: 5.0, c: 38.0, f: 9.0, fib: 3.0, type: 'Breakfast', notes: 'HealthifyMe: 1 masala dosa with potato filling' }
+  ];
+
+  let multiplier = 1.0;
+  const numMatch = q.match(/^(\d+(?:\.\d+)?)\s*(?:g|gm|grams|pcs?|pieces?|roti|eggs?)?/);
+  if (numMatch) {
+    const val = parseFloat(numMatch[1]);
+    if (q.includes('100g') || (val === 100 && (q.includes('peanuts') || q.includes('paneer') || q.includes('chicken')))) {
+      multiplier = 1.0;
+    } else if (val > 0 && val <= 10) {
+      multiplier = val;
+    }
+  }
+
+  for (const item of db) {
+    for (const kw of item.match) {
+      if (q.includes(kw)) {
+        return {
+          dish_name: multiplier > 1 ? `${multiplier}x ${item.name}` : item.name,
+          meal_type: item.type,
+          calories: Math.round(item.cal * multiplier),
+          protein: Math.round(item.p * multiplier * 10) / 10,
+          carbs: Math.round(item.c * multiplier * 10) / 10,
+          fat: Math.round(item.f * multiplier * 10) / 10,
+          fiber: Math.round(item.fib * multiplier * 10) / 10,
+          notes: item.notes,
+          source: 'HealthifyMe Indian Nutrition Standards'
+        };
+      }
+    }
+  }
+
+  return {
+    dish_name: query.trim(),
+    meal_type: 'Lunch',
+    calories: Math.round(320 * multiplier),
+    protein: Math.round(12 * multiplier * 10) / 10,
+    carbs: Math.round(42 * multiplier * 10) / 10,
+    fat: Math.round(10 * multiplier * 10) / 10,
+    fiber: 4.0,
+    notes: 'Estimated via HealthifyMe balanced Indian portion heuristic',
+    source: 'HealthifyMe Indian Nutrition Standards'
   };
 }

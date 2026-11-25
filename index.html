@@ -35,7 +35,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   
   <!-- Monochrome Stylesheet -->
-  <link rel="stylesheet" href="css/styles.css?v=4.6.0-time-fields">
+  <link rel="stylesheet" href="css/styles.css?v=4.7.0-healthifyme-medical">
 </head>
 <body>
 
@@ -126,6 +126,10 @@
         <button class="nav-btn" data-view="journal" onclick="app.navigate('journal')">
           <i data-lucide="book-open"></i>
           <span>Journal</span>
+        </button>
+        <button class="nav-btn" data-view="medical" onclick="app.navigate('medical')">
+          <i data-lucide="cross"></i>
+          <span>Medical & Rx</span>
         </button>
         <button class="nav-btn" data-view="report" onclick="app.navigate('report')">
           <i data-lucide="file-text"></i>
@@ -1046,9 +1050,22 @@
               <div id="foodViewItemizedEditorContainer" style="display: none; margin-bottom: 1.5rem;"></div>
 
               <form id="foodForm" onsubmit="app.submitFood(event)">
-                <div class="form-group">
-                  <label class="form-label">Dish / Meal Name</label>
-                  <input type="text" id="foodDishName" placeholder="e.g. Meal 1: Whole eggs, sweet potato & whey" required>
+                <div class="form-group" style="position: relative;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                    <label class="form-label" style="margin-bottom: 0;">Dish / Meal Name</label>
+                    <span class="food-ai-badge"><i data-lucide="sparkles" style="width: 10px; height: 10px;"></i> HealthifyMe AI Macro Search</span>
+                  </div>
+                  <div style="display: flex; gap: 0.5rem;">
+                    <div class="food-search-wrapper" style="flex: 1;">
+                      <input type="text" id="foodDishName" placeholder="e.g. Meal 1: Whole eggs, sweet potato & whey (or search salted peanuts...)" autocomplete="off" oninput="app.onFoodSearchInput(this.value, 'main')" required>
+                      <div id="mainFoodSuggestions" class="food-suggestions-dropdown"></div>
+                    </div>
+                    <button type="button" class="btn-secondary" onclick="app.estimateFoodWithAI('main')" title="Auto-fill exact macros with HealthifyMe Indian Food AI" style="white-space: nowrap; height: 42px; display: inline-flex; align-items: center; gap: 0.35rem; padding: 0 0.85rem; font-size: 0.82rem; font-weight: 600;">
+                      <i data-lucide="sparkles" style="width: 14px; height: 14px; color: var(--gold-dark);"></i>
+                      <span>AI Auto-Fill</span>
+                    </button>
+                  </div>
+                  <div id="mainFoodAiResultNote" style="display: none; font-size: 0.74rem; color: #10b981; margin-top: 0.35rem; font-weight: 600;"></div>
                 </div>
 
                 <div class="form-grid-3">
@@ -1581,7 +1598,289 @@
         </section>
 
         <!-- ===================================================================
-             VIEW 8: DAILY REPORT & AI AUDIT (WITH PRINT / DOWNLOAD)
+             VIEW 8: MEDICAL, TABLETS, INJECTIONS & BLOOD TESTS
+             =================================================================== -->
+        <section id="view-medical" class="app-view">
+          <div class="view-header">
+            <div class="view-title-block">
+              <h1>Medical, Meds & Blood Tests</h1>
+              <p>Track prescription tablets, injections, illness episodes, and diagnostic lab biomarkers. Syncs with Daily & Monthly Performance Reports.</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn-secondary" onclick="app.openMonthlyReportModal()">
+                <i data-lucide="calendar" style="width: 15px; height: 15px;"></i>
+                <span>Monthly Health Report</span>
+              </button>
+              <button class="btn-secondary" onclick="app.navigate('dashboard')">
+                <i data-lucide="arrow-left" style="width: 15px; height: 15px;"></i>
+                <span>Back to Dashboard</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Medical Overview Metrics Strip -->
+          <div class="metrics-grid-4" style="margin-bottom: 1.5rem;">
+            <div class="metric-card">
+              <div class="metric-label">Active Prescriptions</div>
+              <div class="metric-val" id="medMetricActiveCount">0</div>
+              <div class="metric-sub" id="medMetricActiveSub">Tablets & Injections</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Current Health Status</div>
+              <div class="metric-val" id="medMetricHealthStatus" style="font-size: 1.15rem; color: #10b981;">Optimal</div>
+              <div class="metric-sub" id="medMetricHealthSub">No active illness</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Latest Blood Test</div>
+              <div class="metric-val" id="medMetricLastTestDate" style="font-size: 1.15rem;">None</div>
+              <div class="metric-sub" id="medMetricLastTestSub">Diagnostic Panel</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Recovery Impact</div>
+              <div class="metric-val" id="medMetricTrainingStatus" style="font-size: 1.15rem;">Normal</div>
+              <div class="metric-sub">Training & Diet Mode</div>
+            </div>
+          </div>
+
+          <!-- Subtabs: Meds vs Illness vs Blood Tests -->
+          <div class="medical-tabs-nav">
+            <button class="medical-tab-btn active" id="medTabBtn-prescriptions" onclick="app.switchMedicalTab('prescriptions')">
+              <i data-lucide="pill" style="width: 16px; height: 16px;"></i>
+              <span>Tablets & Injections</span>
+            </button>
+            <button class="medical-tab-btn" id="medTabBtn-illness" onclick="app.switchMedicalTab('illness')">
+              <i data-lucide="thermometer" style="width: 16px; height: 16px;"></i>
+              <span>Sickness & Illness</span>
+            </button>
+            <button class="medical-tab-btn" id="medTabBtn-blood" onclick="app.switchMedicalTab('blood')">
+              <i data-lucide="activity" style="width: 16px; height: 16px;"></i>
+              <span>Blood Tests & Labs</span>
+            </button>
+          </div>
+
+          <!-- SUBTAB 1: PRESCRIPTIONS (TABLETS & INJECTIONS) -->
+          <div id="medSubtab-prescriptions" class="med-subtab-pane">
+            <div class="feature-page-grid">
+              <div class="panel-box">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="plus-circle" style="width: 18px; height: 18px;"></i>
+                    <span>Log Tablet or Injection</span>
+                  </div>
+                </div>
+
+                <form id="medicationForm" onsubmit="app.submitMedicalLog(event, 'medication')">
+                  <div class="form-group">
+                    <label class="form-label">Medicine / Drug Name</label>
+                    <input type="text" id="medTitle" placeholder="e.g. Azithromycin 500mg, Neurobion Forte, Paracetamol 650mg" required>
+                  </div>
+
+                  <div class="form-grid-3">
+                    <div class="form-group">
+                      <label class="form-label">Type / Form</label>
+                      <select id="medType">
+                        <option value="tablet">Tablet / Capsule</option>
+                        <option value="injection">Injection (IM / SC / IV)</option>
+                        <option value="syrup">Syrup / Suspension</option>
+                        <option value="topical">Topical / Ointment</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Dosage</label>
+                      <input type="text" id="medDosage" placeholder="e.g. 500 mg, 2 ml, 1 tablet" required>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Frequency</label>
+                      <select id="medFrequency">
+                        <option value="Once Daily">Once Daily</option>
+                        <option value="Twice Daily (Morning & Night)">Twice Daily (BD)</option>
+                        <option value="Thrice Daily">Thrice Daily (TDS)</option>
+                        <option value="Alternate Days">Alternate Days</option>
+                        <option value="Weekly Once">Weekly Once</option>
+                        <option value="As Needed (SOS)">As Needed (SOS)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="form-grid-3">
+                    <div class="form-group">
+                      <label class="form-label">Timing / Schedule</label>
+                      <select id="medTiming">
+                        <option value="Morning (Fasted)">Morning (Fasted)</option>
+                        <option value="With Breakfast">With Breakfast</option>
+                        <option value="After Lunch">After Lunch</option>
+                        <option value="After Dinner">After Dinner</option>
+                        <option value="Bedtime">Bedtime</option>
+                        <option value="Pre-Workout">Pre-Workout</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Start Date</label>
+                      <input type="date" id="medStartDate" required>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">End Date (optional)</label>
+                      <input type="date" id="medEndDate">
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Doctor / Clinical Purpose & Notes</label>
+                    <input type="text" id="medNotes" placeholder="e.g. Prescribed by Dr. Mehta for 5 days. For viral throat recovery.">
+                  </div>
+
+                  <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">
+                    <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+                    <span>Save Medication / Injection</span>
+                  </button>
+                </form>
+              </div>
+
+              <!-- Active & Past Meds List -->
+              <div class="panel-box">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="list" style="width: 18px; height: 18px;"></i>
+                    <span>Medications & Injections Register</span>
+                  </div>
+                </div>
+                <div id="medicationsListContainer" class="timeline-list"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUBTAB 2: ILLNESS & SICK EPISODES -->
+          <div id="medSubtab-illness" class="med-subtab-pane" style="display: none;">
+            <div class="feature-page-grid">
+              <div class="panel-box">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="alert-triangle" style="width: 18px; height: 18px; color: #ef4444;"></i>
+                    <span>Log Sickness / Illness Episode</span>
+                  </div>
+                </div>
+
+                <form id="illnessForm" onsubmit="app.submitMedicalLog(event, 'illness')">
+                  <div class="form-group">
+                    <label class="form-label">Condition / Illness</label>
+                    <input type="text" id="illnessTitle" placeholder="e.g. Viral Fever, Food Poisoning, Severe Muscle Strain, Migraine" required>
+                  </div>
+
+                  <div class="form-grid-3">
+                    <div class="form-group">
+                      <label class="form-label">Severity Level</label>
+                      <select id="illnessSeverity">
+                        <option value="Mild">Mild (Light training / normal diet)</option>
+                        <option value="Moderate" selected>Moderate (Rest required / reduced calories)</option>
+                        <option value="Severe">Severe (Strict bed rest / medical supervision)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Episode Start Date</label>
+                      <input type="date" id="illnessStartDate" required>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Recovery Date (leave empty if ongoing)</label>
+                      <input type="date" id="illnessEndDate">
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Symptoms & Bodily Indicators</label>
+                    <input type="text" id="illnessSymptoms" placeholder="e.g. 101F fever, chills, gut distress, dehydration, lower back spasm">
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Protocol Adjustments & Recovery Strategy</label>
+                    <textarea id="illnessNotes" rows="2" placeholder="e.g. Training suspended for 48 hours. Hydration target boosted to 4L with ORS. Easy-to-digest carbs (khichdi, curd)."></textarea>
+                  </div>
+
+                  <button type="submit" class="btn-primary" style="margin-top: 0.5rem; background: #dc2626;">
+                    <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+                    <span>Record Illness Episode</span>
+                  </button>
+                </form>
+              </div>
+
+              <!-- Illness Register -->
+              <div class="panel-box">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="shield-alert" style="width: 18px; height: 18px;"></i>
+                    <span>Illness History & Active Recovery</span>
+                  </div>
+                </div>
+                <div id="illnessListContainer" class="timeline-list"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUBTAB 3: BLOOD TESTS & LAB BIOMARKERS -->
+          <div id="medSubtab-blood" class="med-subtab-pane" style="display: none;">
+            <div class="feature-page-grid">
+              <div class="panel-box">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="flask-conical" style="width: 18px; height: 18px; color: #a855f7;"></i>
+                    <span>Log Diagnostic Blood Test Report</span>
+                  </div>
+                </div>
+
+                <form id="bloodTestForm" onsubmit="app.submitMedicalLog(event, 'blood_test')">
+                  <div class="form-grid-2">
+                    <div class="form-group">
+                      <label class="form-label">Test / Profile Title</label>
+                      <input type="text" id="bloodTitle" placeholder="e.g. Comprehensive Annual Health Checkup, CBC & Lipid Profile" required>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Test Date</label>
+                      <input type="date" id="bloodDate" required>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Diagnostic Laboratory / Clinic</label>
+                    <input type="text" id="bloodLab" placeholder="e.g. Dr. Lal PathLabs, Thyrocare, SRL Diagnostics">
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label" style="display: flex; justify-content: space-between;">
+                      <span>Key Biomarkers & Quantitative Values</span>
+                      <button type="button" onclick="app.insertBiomarkerTemplate()" style="background: none; border: none; color: var(--gold-dark); cursor: pointer; font-size: 0.75rem; text-decoration: underline;">
+                        Insert Standard Biomarker Template
+                      </button>
+                    </label>
+                    <textarea id="bloodLabResults" rows="4" placeholder="e.g. HbA1c: 5.4%, Fasting Glucose: 92 mg/dL, Total Cholesterol: 175 mg/dL, Triglycerides: 110 mg/dL, HDL: 48 mg/dL, LDL: 105 mg/dL, Vitamin D3: 34 ng/mL, Vitamin B12: 480 pg/mL, Total Testosterone: 640 ng/dL, SGPT/ALT: 28 U/L, Creatinine: 0.95 mg/dL"></textarea>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Physician Remarks / Clinical Analysis</label>
+                    <textarea id="bloodNotes" rows="2" placeholder="e.g. All metabolic parameters normal. Continue Vitamin D3 supplementation. Liver and kidney profiles clean."></textarea>
+                  </div>
+
+                  <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">
+                    <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+                    <span>Save Blood Test Biomarkers</span>
+                  </button>
+                </form>
+              </div>
+
+              <!-- Blood Tests List -->
+              <div class="panel-box">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="file-check" style="width: 18px; height: 18px;"></i>
+                    <span>Blood Tests & Lab Biomarkers History</span>
+                  </div>
+                </div>
+                <div id="bloodTestsListContainer" class="timeline-list"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             VIEW 9: DAILY REPORT & AI AUDIT (WITH PRINT / DOWNLOAD)
              =================================================================== -->
         <section id="view-report" class="app-view">
           <div class="view-header">
@@ -1595,6 +1894,10 @@
                 <span class="current-date-label" id="reportDateLabel">Today</span>
                 <button class="date-nav-btn" onclick="app.changeDate(1)"><i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i></button>
               </div>
+              <button class="btn-secondary" onclick="app.openMonthlyReportModal()" title="View 30-Day Aggregated Health & Medical Report">
+                <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
+                <span>Monthly Report</span>
+              </button>
               <button class="btn-secondary" onclick="app.runAiAudit()" title="Re-calculate AI Audit">
                 <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
                 <span>Re-run Audit</span>
@@ -1618,6 +1921,9 @@
                 TRAVEL. LEARN. IMPROVE.
               </div>
             </div>
+
+            <!-- Clinical Health, Illness & Medication Status Banner -->
+            <div id="reportMedicalBannerContainer"></div>
 
             <div class="audit-score-hero">
               <div style="flex: 1; min-width: 260px;">
@@ -1995,9 +2301,22 @@
 
         <div id="qtab-food" class="qtab-content" style="display: none;">
           <form onsubmit="app.submitQuickFood(event)">
-            <div class="form-group">
-              <label class="form-label">Meal Name</label>
-              <input type="text" id="qFoodName" placeholder="e.g. Meal 1: Whole eggs, sweet potato & whey" required>
+            <div class="form-group" style="position: relative;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label class="form-label" style="margin-bottom: 0;">Meal / Food Name</label>
+                <span class="food-ai-badge"><i data-lucide="sparkles" style="width: 10px; height: 10px;"></i> HealthifyMe AI Auto-Complete</span>
+              </div>
+              <div style="display: flex; gap: 0.5rem;">
+                <div class="food-search-wrapper" style="flex: 1;">
+                  <input type="text" id="qFoodName" placeholder="e.g. salted peanuts, 2 roti with dal, paneer..." autocomplete="off" oninput="app.onFoodSearchInput(this.value, 'quick')" required>
+                  <div id="qFoodSuggestions" class="food-suggestions-dropdown"></div>
+                </div>
+                <button type="button" class="btn-secondary" onclick="app.estimateFoodWithAI('quick')" title="Auto-fill exact macros with HealthifyMe Indian Food AI" style="white-space: nowrap; height: 42px; display: inline-flex; align-items: center; gap: 0.35rem; padding: 0 0.85rem; font-size: 0.82rem; font-weight: 600;">
+                  <i data-lucide="sparkles" style="width: 14px; height: 14px; color: var(--gold-dark);"></i>
+                  <span>AI Auto-Fill</span>
+                </button>
+              </div>
+              <div id="qFoodAiResultNote" style="display: none; font-size: 0.74rem; color: #10b981; margin-top: 0.35rem; font-weight: 600;"></div>
             </div>
             <div class="form-grid-3">
               <div class="form-group">
@@ -2018,14 +2337,18 @@
                 <input type="number" id="qFoodCalories" placeholder="680" required>
               </div>
             </div>
-            <div class="form-grid-2">
+            <div class="form-grid-3">
               <div class="form-group">
                 <label class="form-label">Protein (g)</label>
-                <input type="number" id="qFoodProtein" placeholder="54">
+                <input type="number" step="0.1" id="qFoodProtein" placeholder="8">
               </div>
               <div class="form-group">
                 <label class="form-label">Carbs (g)</label>
-                <input type="number" id="qFoodCarbs" placeholder="46">
+                <input type="number" step="0.1" id="qFoodCarbs" placeholder="5">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Fat (g)</label>
+                <input type="number" step="0.1" id="qFoodFat" placeholder="14">
               </div>
             </div>
             <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">Log Food & Update Dashboard</button>
@@ -2403,6 +2726,43 @@
             <button type="submit" class="btn-primary" style="width: auto;">Save New Password</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL: 30-DAY MONTHLY HEALTH, TELEMETRY & CLINICAL AUDIT REPORT
+       =================================================================== -->
+  <div id="monthlyReportModal" class="modal-overlay" style="z-index: 1060; display: none;" onclick="app.closeMonthlyReportModalIfOutside(event)">
+    <div class="modal-dialog" style="max-width: 820px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" style="display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="calendar" style="width: 20px; height: 20px; color: var(--gold-dark);"></i>
+            <span>Monthly Telemetry & Clinical Health Report</span>
+          </h3>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.2rem;">
+            30-day comprehensive audit of nutrition, physical exertion, restorative sleep, illness days & medical adherence.
+          </p>
+        </div>
+        <button class="modal-close-btn" onclick="app.closeMonthlyReportModal()"><i data-lucide="x" style="width: 18px; height: 18px;"></i></button>
+      </div>
+
+      <div class="modal-body">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <label class="form-label" style="margin-bottom: 0;">Select Month:</label>
+            <select id="monthlyReportSelect" onchange="app.loadMonthlyReportData(this.value)" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; width: auto;"></select>
+          </div>
+          <button class="btn-primary" onclick="window.print()" style="width: auto; padding: 0.4rem 0.9rem; font-size: 0.8rem;">
+            <i data-lucide="printer" style="width: 14px; height: 14px;"></i>
+            <span>Print / Save PDF</span>
+          </button>
+        </div>
+
+        <div id="monthlyReportContentContainer">
+          <!-- Dynamic 30-day metrics, charts, illness summary, and blood test analysis -->
+        </div>
       </div>
     </div>
   </div>
@@ -2785,7 +3145,7 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <!-- SheetJS Full Library for Multi-Sheet Client Excel (.xlsx) Exports -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="js/supabase-client.js?v=4.6.0-time-fields"></script>
-  <script src="js/app.js?v=4.6.0-time-fields"></script>
+  <script src="js/supabase-client.js?v=4.7.0-healthifyme-medical"></script>
+  <script src="js/app.js?v=4.7.0-healthifyme-medical"></script>
 </body>
 </html>
