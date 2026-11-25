@@ -289,6 +289,30 @@ class FYNApp {
     const views = ['dashboard', 'protocol', 'food', 'fitness', 'sleep', 'weight', 'journal', 'report', 'ai-coach', 'targets', 'medical'];
     if (!views.includes(viewName)) viewName = 'dashboard';
 
+    // Discard & wipe any unsaved data from modal or page forms when exiting/switching views
+    this.closeQuickModal();
+
+    if (viewName !== 'food') {
+      const foodForm = document.getElementById('foodForm');
+      if (foodForm) foodForm.reset();
+      const mainNote = document.getElementById('mainFoodAiResultNote');
+      if (mainNote) {
+        mainNote.textContent = '';
+        mainNote.style.display = 'none';
+      }
+      const mainSugg = document.getElementById('mainFoodSuggestions');
+      if (mainSugg) {
+        mainSugg.innerHTML = '';
+        mainSugg.classList.remove('active');
+      }
+    }
+
+    if (viewName !== 'medical') {
+      document.getElementById('medicationForm')?.reset();
+      document.getElementById('illnessForm')?.reset();
+      document.getElementById('bloodTestForm')?.reset();
+    }
+
     this.currentView = viewName;
     if (updateHash) {
       window.location.hash = viewName;
@@ -2946,6 +2970,7 @@ class FYNApp {
       this.openAuthModal('login');
       return;
     }
+    this.resetQuickModalForms();
     const modal = document.getElementById('quickUpdateModal');
     if (modal) modal.classList.add('open');
   }
@@ -2953,11 +2978,102 @@ class FYNApp {
   closeQuickModal() {
     const modal = document.getElementById('quickUpdateModal');
     if (modal) modal.classList.remove('open');
+    this.resetQuickModalForms();
   }
 
   closeQuickModalIfOutside(e) {
     if (e.target.id === 'quickUpdateModal') {
       this.closeQuickModal();
+    }
+  }
+
+  resetQuickModalForms(specificTab = null) {
+    // 1. Food Tab Form
+    if (!specificTab || specificTab === 'food') {
+      const qFoodName = document.getElementById('qFoodName');
+      const qFoodCalories = document.getElementById('qFoodCalories');
+      const qFoodProtein = document.getElementById('qFoodProtein');
+      const qFoodCarbs = document.getElementById('qFoodCarbs');
+      const qFoodFat = document.getElementById('qFoodFat');
+      const qFoodTime = document.getElementById('qFoodTime');
+      const qFoodType = document.getElementById('qFoodType');
+      const qFoodAiResultNote = document.getElementById('qFoodAiResultNote');
+      const qFoodSuggestions = document.getElementById('qFoodSuggestions');
+
+      if (qFoodName) qFoodName.value = '';
+      if (qFoodCalories) qFoodCalories.value = '';
+      if (qFoodProtein) qFoodProtein.value = '';
+      if (qFoodCarbs) qFoodCarbs.value = '';
+      if (qFoodFat) qFoodFat.value = '';
+      if (qFoodTime) qFoodTime.value = '';
+      if (qFoodType) qFoodType.value = 'Snack';
+      if (qFoodAiResultNote) {
+        qFoodAiResultNote.textContent = '';
+        qFoodAiResultNote.style.display = 'none';
+      }
+      if (qFoodSuggestions) {
+        qFoodSuggestions.innerHTML = '';
+        qFoodSuggestions.classList.remove('active');
+      }
+    }
+
+    // 2. Fitness Tab Form
+    if (!specificTab || specificTab === 'fitness') {
+      const qFitType = document.getElementById('qFitType');
+      const qFitDuration = document.getElementById('qFitDuration');
+      const qFitBurn = document.getElementById('qFitBurn');
+      const qFitHr = document.getElementById('qFitHr');
+      const qFitSteps = document.getElementById('qFitSteps');
+
+      if (qFitType) qFitType.value = '';
+      if (qFitDuration) qFitDuration.value = '';
+      if (qFitBurn) qFitBurn.value = '';
+      if (qFitHr) qFitHr.value = '';
+      if (qFitSteps) qFitSteps.value = '';
+    }
+
+    // 3. Sleep Tab Form
+    if (!specificTab || specificTab === 'sleep') {
+      const qSleepHoursH = document.getElementById('qSleepHoursH');
+      const qSleepHoursM = document.getElementById('qSleepHoursM');
+      const qSleepScore = document.getElementById('qSleepScore');
+      const qSleepDeepH = document.getElementById('qSleepDeepH');
+      const qSleepDeepM = document.getElementById('qSleepDeepM');
+      const qSleepRestHr = document.getElementById('qSleepRestHr');
+
+      if (qSleepHoursH) qSleepHoursH.value = '';
+      if (qSleepHoursM) qSleepHoursM.value = '';
+      if (qSleepScore) qSleepScore.value = '';
+      if (qSleepDeepH) qSleepDeepH.value = '';
+      if (qSleepDeepM) qSleepDeepM.value = '';
+      if (qSleepRestHr) qSleepRestHr.value = '';
+    }
+
+    // 4. Weight / Scale Tab Form
+    if (!specificTab || specificTab === 'weight') {
+      const qWeightVal = document.getElementById('qWeightVal');
+      const qWeightFat = document.getElementById('qWeightFat');
+      const qWeightNotes = document.getElementById('qWeightNotes');
+
+      if (qWeightVal) qWeightVal.value = '';
+      if (qWeightFat) qWeightFat.value = '';
+      if (qWeightNotes) qWeightNotes.value = '';
+    }
+
+    // 5. Universal Photo Scanner Form
+    if (!specificTab || specificTab === 'smart-photo') {
+      const fileInput = document.getElementById('universalFileInput');
+      const resultCard = document.getElementById('universalResultCard');
+      const emptyPrompt = document.getElementById('universalEmptyPrompt');
+      const scanningState = document.getElementById('universalScanningState');
+      const fieldsContainer = document.getElementById('universalFieldsContainer');
+
+      if (fileInput) fileInput.value = '';
+      if (resultCard) resultCard.style.display = 'none';
+      if (fieldsContainer) fieldsContainer.innerHTML = '';
+      if (emptyPrompt) emptyPrompt.style.display = 'block';
+      if (scanningState) scanningState.style.display = 'none';
+      this.pendingUniversalScan = null;
     }
   }
 
@@ -5686,7 +5802,7 @@ class FYNApp {
       { name: "Roasted Peanuts (plain / 30g)", alias: ["roasted peanuts", "bhuna peanuts", "mungfali", "singdana"], cal: 166, p: 7.8, c: 4.8, f: 14.0, fib: 2.6, type: "Snack", notes: "HealthifyMe: 30g dry roasted peanuts" },
       { name: "Roti / Phulka (1 piece)", alias: ["roti", "chapati", "phulka", "fulka", "chapatti"], cal: 85, p: 3.0, c: 18.0, f: 0.4, fib: 2.2, type: "Lunch", notes: "HealthifyMe: 1 wheat roti (30g dough, no ghee)" },
       { name: "Butter / Ghee Roti (1 piece)", alias: ["ghee roti", "butter roti"], cal: 110, p: 3.0, c: 18.0, f: 3.0, fib: 2.2, type: "Lunch", notes: "HealthifyMe: 1 wheat roti with 1/2 tsp ghee" },
-      { name: "Paneer (raw, 100g)", alias: ["paneer", "cottage cheese", "paneer 100g", "raw paneer"], cal: 265, p: 18.3, c: 3.0, f: 20.8, fib: 0.0, type: "Dinner", notes: "HealthifyMe: 100g full-fat fresh paneer" },
+      { name: "Paneer (raw, 100g)", alias: ["paneer", "cottage cheese", "paneer 100g", "raw paneer", "panner", "paner", "panner 100g"], cal: 265, p: 18.3, c: 3.0, f: 20.8, fib: 0.0, type: "Dinner", notes: "HealthifyMe: 100g full-fat fresh paneer" },
       { name: "Low Fat Paneer (100g)", alias: ["low fat paneer", "skimmed paneer"], cal: 180, p: 25.0, c: 3.5, f: 7.0, fib: 0.0, type: "Dinner", notes: "HealthifyMe: 100g low fat paneer" },
       { name: "Boiled Egg (Whole / 1 large)", alias: ["egg", "boiled egg", "1 egg", "anda", "whole egg"], cal: 74, p: 6.3, c: 0.4, f: 5.0, fib: 0.0, type: "Breakfast", notes: "HealthifyMe: 1 large whole egg (50g)" },
       { name: "Egg White (1 large)", alias: ["egg white", "egg whites", "white egg", "egg white 1"], cal: 17, p: 3.6, c: 0.2, f: 0.1, fib: 0.0, type: "Breakfast", notes: "HealthifyMe: 1 egg white (33g)" },

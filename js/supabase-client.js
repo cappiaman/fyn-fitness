@@ -2415,7 +2415,7 @@ function estimateFoodMacrosClient(query) {
     { name: 'Roasted Peanuts (30g)', match: ['roasted peanut', 'bhuna peanut', 'mungfali', 'singdana'], cal: 166, p: 7.8, c: 4.8, f: 14.0, fib: 2.6, type: 'Snack', notes: 'HealthifyMe: 30g dry roasted peanuts' },
     { name: 'Roti / Phulka (1 piece)', match: ['roti', 'phulka', 'chapati', 'fulka', 'chapatti'], cal: 85, p: 3.0, c: 18.0, f: 0.4, fib: 2.2, type: 'Lunch', notes: 'HealthifyMe: 1 wheat roti (30g dough, no ghee)' },
     { name: 'Ghee Roti (1 piece)', match: ['ghee roti', 'butter roti'], cal: 110, p: 3.0, c: 18.0, f: 3.0, fib: 2.2, type: 'Lunch', notes: 'HealthifyMe: 1 wheat roti with 1/2 tsp ghee' },
-    { name: 'Paneer Raw (100g)', match: ['paneer', 'cottage cheese', 'raw paneer'], cal: 265, p: 18.3, c: 3.0, f: 20.8, fib: 0.0, type: 'Dinner', notes: 'HealthifyMe: 100g full-fat fresh paneer' },
+    { name: 'Paneer Raw (100g)', match: ['paneer', 'cottage cheese', 'raw paneer', 'panner', 'paner'], cal: 265, p: 18.3, c: 3.0, f: 20.8, fib: 0.0, type: 'Dinner', notes: 'HealthifyMe: 100g full-fat fresh paneer' },
     { name: 'Low Fat Paneer (100g)', match: ['low fat paneer', 'skimmed paneer'], cal: 180, p: 25.0, c: 3.5, f: 7.0, fib: 0.0, type: 'Dinner', notes: 'HealthifyMe: 100g low-fat paneer' },
     { name: 'Boiled Egg (1 whole)', match: ['boiled egg', 'whole egg', '1 egg', 'anda', 'egg'], cal: 74, p: 6.3, c: 0.4, f: 5.0, fib: 0.0, type: 'Breakfast', notes: 'HealthifyMe: 1 large whole egg (50g)' },
     { name: 'Egg White (1 large)', match: ['egg white', 'egg whites', 'white egg'], cal: 17, p: 3.6, c: 0.2, f: 0.1, fib: 0.0, type: 'Breakfast', notes: 'HealthifyMe: 1 egg white (33g)' },
